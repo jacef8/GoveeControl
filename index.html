@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0e1f" />
+<link rel="manifest" href="manifest.json" />
+<title>Govee Control</title>
+<style>
+  :root{
+    --ink:#eef2ff; --dim:#8b97b8; --accent:#6e8bff; --on:#39d98a; --avh:100dvh;
+    --glass:rgba(255,255,255,.05); --glass2:rgba(255,255,255,.09);
+    --stroke:rgba(255,255,255,.10); --stroke2:rgba(255,255,255,.17); --radius:20px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
+    font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(125% 85% at 12% -5%, #1b1648 0%, #0c1024 52%, #070912 100%)}
+  body{display:flex; flex-direction:column}
+  /* ---------- top bar ---------- */
+  header{flex:0 0 auto; padding:calc(15px + env(safe-area-inset-top)) 18px 14px;
+    display:flex; align-items:center; gap:11px; border-bottom:1px solid var(--stroke);
+    background:rgba(255,255,255,.04); backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px)}
+  header h1{font-size:20px; margin:0; font-weight:650; letter-spacing:-.3px; flex:1;
+    display:flex; align-items:center; gap:10px}
+  .logo{width:28px;height:28px;border-radius:9px;background:
+    conic-gradient(from 210deg,#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e);
+    box-shadow:0 0 20px rgba(120,140,255,.45)}
+  .hbtn{appearance:none; border:1px solid var(--stroke2); background:var(--glass);
+    color:var(--ink); font-weight:600; font-size:14px; padding:9px 14px; border-radius:14px;
+    cursor:pointer; backdrop-filter:blur(10px); transition:transform .15s, background .2s}
+  .hbtn:hover{background:var(--glass2)}
+  .hbtn:active{transform:scale(.96)}
+  .hbtn.on{border-color:rgba(57,217,138,.4); color:#7ff0b6; background:rgba(57,217,138,.12)}
+  .hbtn.off{border-color:rgba(255,120,120,.35); color:#ff9d9d; background:rgba(255,120,120,.1)}
+  /* ---------- scroll body ---------- */
+  main{flex:1 1 auto; overflow:auto; padding:16px 16px 30px; -webkit-overflow-scrolling:touch}
+  .grpttl{font-size:13px; font-weight:600; color:#cdd6ee; margin:20px 4px 12px;
+    display:flex; align-items:center; gap:10px}
+  .grpttl:first-child{margin-top:4px}
+  .grpttl .gcount{font-weight:500; color:#6f7ea3}
+  .grpttl .gtoggle{margin-left:auto; display:flex; gap:7px}
+  .mini{appearance:none; border:1px solid var(--stroke); background:var(--glass);
+    color:#aeb6cc; font-weight:600; font-size:12px; padding:5px 12px; border-radius:11px; cursor:pointer}
+  .mini:active{transform:scale(.95)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px}
+  /* ---------- light card ---------- */
+  .card{position:relative; border:1px solid var(--stroke); border-radius:var(--radius);
+    background:var(--glass); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    padding:16px; overflow:hidden; transition:border-color .35s, box-shadow .35s, background .35s}
+  .card.on{border-color:color-mix(in srgb,var(--cardc,#6e8bff) 45%, transparent);
+    box-shadow:0 10px 40px -14px var(--cardc,#6e8bff), inset 0 0 0 1px color-mix(in srgb,var(--cardc,#6e8bff) 35%, transparent)}
+  .card.offline{opacity:.5}
+  .card .glow{position:absolute; inset:auto -40% -65% -40%; height:140px; filter:blur(48px);
+    background:var(--cardc,#6e8bff); opacity:0; transition:opacity .35s; pointer-events:none}
+  .card.on .glow{opacity:.28}
+  .crow{position:relative; display:flex; align-items:flex-start; gap:10px; z-index:1}
+  .cname{font-weight:600; font-size:16px; line-height:1.2; letter-spacing:-.2px}
+  .csku{font-size:11px; color:var(--dim); margin-top:3px; letter-spacing:.3px}
+  .dot{width:8px;height:8px;border-radius:50%; background:#556; margin-top:7px; flex:0 0 auto}
+  .dot.online{background:var(--on); box-shadow:0 0 8px var(--on)}
+  .dot.off2{background:#ff6b6b; box-shadow:0 0 8px #ff6b6b}
+  /* power switch */
+  .pwr{margin-left:auto; flex:0 0 auto}
+  .sw{width:52px;height:30px;border-radius:16px;border:1px solid var(--stroke2);
+    background:rgba(255,255,255,.05); position:relative; cursor:pointer; transition:.25s}
+  .sw .knob{position:absolute; top:2px; left:2px; width:24px;height:24px;border-radius:50%;
+    background:#aeb6cc; transition:left .25s, background .25s; box-shadow:0 2px 6px rgba(0,0,0,.35)}
+  .card.on .sw{background:rgba(57,217,138,.22); border-color:rgba(57,217,138,.5)}
+  .card.on .sw .knob{left:26px; background:var(--on)}
+  .card.offline .sw{cursor:not-allowed}
+  /* brightness */
+  .ctl{position:relative; z-index:1; margin-top:15px}
+  .lbl{display:flex; justify-content:space-between; font-size:11px; color:var(--dim);
+    font-weight:500; letter-spacing:.4px; margin-bottom:8px; text-transform:uppercase}
+  .lbl span:last-child{color:#cdd6ee}
+  input[type=range]{width:100%; appearance:none; height:6px; border-radius:6px; cursor:pointer;
+    background:linear-gradient(90deg,var(--cardc,#6e8bff) var(--p,60%),rgba(255,255,255,.1) var(--p,60%))}
+  input[type=range]::-webkit-slider-thumb{appearance:none; width:22px;height:22px;border-radius:50%;
+    background:#fff; border:none; box-shadow:0 2px 8px rgba(0,0,0,.45), 0 0 0 2px color-mix(in srgb,var(--cardc,#6e8bff) 60%, transparent)}
+  input[type=range]:disabled{opacity:.35}
+  /* color row */
+  .colors{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:15px; position:relative; z-index:1}
+  .swatch{width:27px;height:27px;border-radius:50%; border:2px solid rgba(255,255,255,.22); cursor:pointer; transition:transform .15s}
+  .swatch:active{transform:scale(.88)}
+  .swatch.sel{border-color:#fff; box-shadow:0 0 0 3px rgba(255,255,255,.16)}
+  .swatch.custom{display:flex;align-items:center;justify-content:center; font-size:13px; background:
+    conic-gradient(#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); position:relative}
+  .swatch.custom input{position:absolute; inset:0; opacity:0; cursor:pointer}
+  /* footer status */
+  footer{flex:0 0 auto; padding:13px 18px calc(13px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--stroke); font-size:12px; color:var(--dim);
+    display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.03);
+    backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px)}
+  footer .live{display:flex;align-items:center;gap:7px}
+  footer .pulse{width:7px;height:7px;border-radius:50%;background:var(--on);box-shadow:0 0 10px var(--on);
+    animation:pls 2s ease-in-out infinite}
+  @keyframes pls{0%,100%{opacity:1}50%{opacity:.3}}
+  .badge{margin-left:auto; padding:3px 10px;border-radius:9px;background:rgba(255,209,102,.12);color:#ffd166;
+    font-weight:600;font-size:11px;letter-spacing:.3px; border:1px solid rgba(255,209,102,.25)}
+  .empty{color:var(--dim); text-align:center; padding:60px 20px}
+  /* toast */
+  #toast{position:fixed; left:50%; bottom:72px; transform:translateX(-50%) translateY(20px);
+    background:rgba(30,34,60,.85); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--stroke2); color:var(--ink);
+    padding:12px 20px; border-radius:16px; font-weight:600; font-size:14px; opacity:0;
+    transition:opacity .25s, transform .25s; pointer-events:none; z-index:50; max-width:88vw;
+    box-shadow:0 12px 40px -10px rgba(0,0,0,.6)}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  #toast.err{border-color:rgba(255,120,120,.5)}
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="logo"></span> Govee Control</h1>
+    <a class="hbtn" href="scenes.html" style="text-decoration:none">Scenes</a>
+    <button class="hbtn on" data-act="allon">All On</button>
+    <button class="hbtn off" data-act="alloff">All Off</button>
+    <button class="hbtn" data-act="refresh" title="Refresh">⟳</button>
+  </header>
+
+  <main id="app"><div class="empty">Loading lights…</div></main>
+
+  <footer>
+    <span class="live"><span class="pulse"></span><span id="status">Connecting…</span></span>
+    <span id="updated"></span>
+    <span class="badge" id="modebadge">MOCK DATA</span>
+  </footer>
+
+  <div id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG  — flip USE_MOCK to false once the Railway proxy is up.
+   The proxy holds the Govee-API-Key; the browser never sees it.
+   ============================================================ */
+const CONFIG = (() => {
+  // Connection details live in localStorage (set via the ⚙ Settings dialog),
+  // so going live needs no code edit and no secret committed to the repo.
+  // Mock mode stays on until a proxy URL is saved.
+  let s = {}; try { s = JSON.parse(localStorage.getItem("gv_cfg") || "{}"); } catch {}
+  const PROXY_BASE = (s.proxyBase || "").replace(/\/+$/, "");
+  return {
+    USE_MOCK: !PROXY_BASE,
+    PROXY_BASE,
+    PASSCODE: s.passcode || "",
+    POLL_MS: 45000,            // state auto-refresh interval
+  };
+})();
+
+/* ============================================================
+   API LAYER  — same method names whether mock or live.
+   Mock data is shaped exactly like Govee Cloud API v2 responses,
+   so going live is just CONFIG.USE_MOCK = false.
+   ============================================================ */
+const Govee = (() => {
+  // ---- helpers shared by both backends ----
+  const rgbToInt = (r,g,b) => (r<<16)|(g<<8)|b;
+  const intToRgb = n => ({ r:(n>>16)&255, g:(n>>8)&255, b:n&255 });
+
+  // ---------- MOCK backend ----------
+  const mockDevices = [
+    dev("Living Room Lamp","H6008","Living Room", true, true, 70, [255,180,90]),
+    dev("TV Backlight","H6199","Living Room", true, true, 100, [80,120,255]),
+    dev("Kitchen Strip","H6125","Kitchen", true, false, 55, [255,255,255]),
+    dev("Bedroom Bulb","H6009","Bedroom", true, true, 30, [255,120,160]),
+    dev("Backyard Flood","H7060","Backyard", true, false, 90, [120,255,160]),
+    dev("Garage Strip","H619A","Backyard", false, false, 60, [255,255,255]), // offline
+  ];
+  function dev(name,sku,room,online,on,bri,rgb){
+    return { sku, device:"MOCK:"+name.replace(/\W+/g,""), deviceName:name, room,
+      type:"devices.types.light", online,
+      _state:{ on, brightness:bri, color:rgbToInt(...rgb) },
+      capabilities:[
+        {type:"devices.capabilities.on_off",instance:"powerSwitch"},
+        {type:"devices.capabilities.range",instance:"brightness",parameters:{range:{min:1,max:100}}},
+        {type:"devices.capabilities.color_setting",instance:"colorRgb"},
+      ]};
+  }
+  const wait = ms => new Promise(r=>setTimeout(r,ms));
+
+  async function mockList(){
+    await wait(350);
+    return mockDevices.map(d => ({ ...d }));
+  }
+  async function mockState(deviceId){
+    await wait(120);
+    const d = mockDevices.find(x=>x.device===deviceId);
+    return d ? { online:d.online, ...d._state } : null;
+  }
+  async function mockControl(deviceId, capability, instance, value){
+    await wait(180);
+    const d = mockDevices.find(x=>x.device===deviceId);
+    if(!d) throw new Error("device not found");
+    if(!d.online) throw new Error("device offline");
+    if(instance==="powerSwitch") d._state.on = !!value;
+    if(instance==="brightness")  d._state.brightness = value;
+    if(instance==="colorRgb")    d._state.color = value;
+    return { ok:true };
+  }
+
+  // ---------- LIVE backend (Railway proxy) ----------
+  async function call(path, body){
+    const res = await fetch(CONFIG.PROXY_BASE + path, {
+      method: body ? "POST":"GET",
+      headers: { "Content-Type":"application/json", "X-Passcode": CONFIG.PASSCODE },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if(!res.ok) throw new Error("proxy "+res.status);
+    return res.json();
+  }
+  async function liveList(){ return (await call("/govee/devices")).data; }
+  async function liveState(deviceId){ return (await call("/govee/state",{device:deviceId})).data; }
+  async function liveControl(deviceId, capability, instance, value){
+    return call("/govee/control",{ device:deviceId, capability, instance, value });
+  }
+
+  // ---------- public ----------
+  const M = CONFIG.USE_MOCK;
+  return {
+    rgbToInt, intToRgb,
+    list:    M ? mockList    : liveList,
+    state:   M ? mockState   : liveState,
+    setPower:(id,on)   => (M?mockControl:liveControl)(id,"devices.capabilities.on_off","powerSwitch",on?1:0),
+    setBright:(id,v)   => (M?mockControl:liveControl)(id,"devices.capabilities.range","brightness",v),
+    setColor:(id,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorRgb",rgbInt),
+  };
+})();
+
+/* ============================================================
+   UI
+   ============================================================ */
+const PRESETS = [ // name + rgb
+  ["#ffffff",255,255,255],["#ffb347",255,179,71],["#ff5e5e",255,94,94],
+  ["#39d98a",57,217,138],["#4f7cff",79,124,255],["#b66bff",182,107,255],
+];
+let DEVICES = [];
+const app = document.getElementById("app");
+const $ = s => document.querySelector(s);
+
+function cssRgb(n){ const {r,g,b}=Govee.intToRgb(n); return `rgb(${r},${g},${b})`; }
+function toast(msg, isErr){
+  const t=$("#toast"); t.textContent=msg; t.className = "show"+(isErr?" err":"");
+  clearTimeout(t._h); t._h=setTimeout(()=>t.className="",1900);
+}
+function fmtTime(d){ return d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}); }
+
+function render(){
+  if(!DEVICES.length){ app.innerHTML='<div class="empty">No lights found.</div>'; return; }
+  // group by room
+  const rooms = {};
+  DEVICES.forEach(d => (rooms[d.room||"Lights"] ||= []).push(d));
+  let html = "";
+  for(const [room, list] of Object.entries(rooms)){
+    const onCount = list.filter(d=>d._state.on && d.online).length;
+    html += `<div class="grpttl">${room}
+        <span class="gcount">${onCount}/${list.length} on</span>
+        <span class="gtoggle">
+          <button class="mini" data-room="${room}" data-roomact="on">On</button>
+          <button class="mini" data-room="${room}" data-roomact="off">Off</button>
+        </span></div><div class="grid">`;
+    html += list.map(cardHTML).join("");
+    html += `</div>`;
+  }
+  app.innerHTML = html;
+}
+
+function cardHTML(d){
+  const c = cssRgb(d._state.color);
+  const on = d._state.on && d.online;
+  const bri = d._state.brightness;
+  const presets = PRESETS.map(([hex,r,g,b])=>{
+    const sel = (Govee.rgbToInt(r,g,b)===d._state.color) ? " sel":"";
+    return `<span class="swatch${sel}" style="background:${hex}" data-color="${Govee.rgbToInt(r,g,b)}" data-dev="${d.device}"></span>`;
+  }).join("");
+  return `
+  <div class="card ${on?'on':''} ${d.online?'':'offline'}" style="--cardc:${c}" data-card="${d.device}">
+    <div class="glow"></div>
+    <div class="crow">
+      <span class="dot ${d.online?'online':'off2'}"></span>
+      <div>
+        <div class="cname">${d.deviceName}</div>
+        <div class="csku">${d.online?d.sku:'OFFLINE · '+d.sku}</div>
+      </div>
+      <div class="pwr">
+        <div class="sw" data-pwr="${d.device}" role="switch" aria-checked="${on}"><span class="knob"></span></div>
+      </div>
+    </div>
+    <div class="ctl">
+      <div class="lbl"><span>Brightness</span><span>${bri}%</span></div>
+      <input type="range" min="1" max="100" value="${bri}" data-bri="${d.device}"
+             style="--p:${bri}%" ${d.online?'':'disabled'}>
+    </div>
+    <div class="colors">
+      ${presets}
+      <span class="swatch custom" title="Custom color">🎨<input type="color"
+            value="${rgbHex(d._state.color)}" data-pick="${d.device}"></span>
+    </div>
+  </div>`;
+}
+function rgbHex(n){ const {r,g,b}=Govee.intToRgb(n);
+  return "#"+[r,g,b].map(x=>x.toString(16).padStart(2,"0")).join(""); }
+function hexInt(hex){ const n=parseInt(hex.slice(1),16); return n; }
+
+/* ---------- interactions (event delegation) ---------- */
+async function safe(fn, optimistic){
+  try{ optimistic && optimistic(); await fn(); }
+  catch(e){ toast(e.message||"Failed", true); load(); /* resync truth */ }
+}
+app.addEventListener("click", e=>{
+  const pwr = e.target.closest("[data-pwr]");
+  if(pwr){ const d = byId(pwr.dataset.pwr); if(!d.online) return toast("Light is offline",true);
+    const next = !d._state.on;
+    return safe(()=>Govee.setPower(d.device,next), ()=>{ d._state.on=next; render(); });
+  }
+  const sw = e.target.closest("[data-color]");
+  if(sw){ const d = byId(sw.dataset.dev); const v = +sw.dataset.color;
+    return safe(()=>Govee.setColor(d.device,v), ()=>{ d._state.color=v; render(); });
+  }
+  const room = e.target.closest("[data-roomact]");
+  if(room){ const want = room.dataset.roomact==="on"; const name=room.dataset.room;
+    DEVICES.filter(d=>(d.room||"Lights")===name && d.online).forEach(d=>{
+      d._state.on=want; Govee.setPower(d.device,want).catch(()=>{});
+    });
+    render(); toast(`${name}: all ${want?'on':'off'}`); return;
+  }
+});
+app.addEventListener("input", e=>{
+  const bri = e.target.closest("[data-bri]");
+  if(bri){ const d=byId(bri.dataset.bri); const v=+bri.value;
+    d._state.brightness=v; bri.style.setProperty("--p",v+"%");
+    bri.closest(".ctl").querySelector(".lbl span:last-child").textContent=v+"%";
+    clearTimeout(d._briT); d._briT=setTimeout(()=>{
+      safe(()=>Govee.setBright(d.device,v));
+    },220); // debounce while dragging
+  }
+  const pick = e.target.closest("[data-pick]");
+  if(pick){ const d=byId(pick.dataset.pick); const v=hexInt(pick.value);
+    d._state.color=v; clearTimeout(d._colT); d._colT=setTimeout(()=>{
+      safe(()=>Govee.setColor(d.device,v), ()=>render());
+    },220);
+  }
+});
+document.querySelector("header").addEventListener("click", e=>{
+  const b=e.target.closest("[data-act]"); if(!b) return;
+  const a=b.dataset.act;
+  if(a==="refresh") return load();
+  if(a==="allon"||a==="alloff"){ const want=a==="allon";
+    DEVICES.filter(d=>d.online).forEach(d=>{ d._state.on=want; Govee.setPower(d.device,want).catch(()=>{}); });
+    render(); toast(`All lights ${want?'on':'off'}`);
+  }
+});
+const byId = id => DEVICES.find(d=>d.device===id);
+
+/* ---------- load + poll ---------- */
+async function load(){
+  try{
+    $("#status").textContent = "Refreshing…";
+    DEVICES = await Govee.list();
+    // mock list already carries _state; live list will need a state fetch per device:
+    if(!CONFIG.USE_MOCK){
+      await Promise.all(DEVICES.map(async d=>{
+        try{ const s=await Govee.state(d.device);
+          d.online = s?.online ?? true;
+          d._state = { on:!!s.on, brightness:s.brightness??100, color:s.color??Govee.rgbToInt(255,255,255) };
+        }catch{ d.online=false; d._state={on:false,brightness:100,color:Govee.rgbToInt(255,255,255)}; }
+        d.room = d.room || "Lights";
+      }));
+    }
+    render();
+    const n = DEVICES.length, online = DEVICES.filter(d=>d.online).length;
+    $("#status").textContent = `${online}/${n} online`;
+    $("#updated").textContent = "· updated "+fmtTime(new Date());
+  }catch(e){
+    app.innerHTML = `<div class="empty">Couldn't reach the lights.<br><small>${e.message}</small></div>`;
+    $("#status").textContent = "Offline";
+  }
+}
+$("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
+load();
+setInterval(load, CONFIG.POLL_MS);
+
+/* ============================================================
+   SETTINGS  — proxy URL + passcode, stored in localStorage (gv_cfg).
+   No code edits, no secrets in the repo; shared by both pages.
+   ============================================================ */
+(function(){
+  let cfg={}; try{ cfg=JSON.parse(localStorage.getItem("gv_cfg")||"{}"); }catch{}
+  const header=document.querySelector("header"); if(!header) return;
+  const gear=document.createElement("button");
+  gear.title="Settings"; gear.textContent="⚙"; gear.setAttribute("data-cfg","1");
+  gear.style.cssText="margin-left:auto;padding:7px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:inherit;font-size:15px;line-height:1;cursor:pointer";
+  header.appendChild(gear);
+
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:20px";
+  ov.innerHTML=
+    '<div style="width:min(420px,92vw);box-sizing:border-box;background:rgba(22,26,48,.94);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:22px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)">'
+    +'<h2 style="margin:0 0 4px;font-size:19px;font-weight:600">Connect to your lights</h2>'
+    +'<p style="margin:0 0 16px;color:#aab;font-size:13px;line-height:1.5">Leave the URL blank to stay in demo mode. Fill it in once your Railway proxy is deployed.</p>'
+    +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Proxy URL</label>'
+    +'<input id="cfgUrl" placeholder="https://your-app.up.railway.app" style="width:100%;box-sizing:border-box;padding:11px 13px;margin-bottom:14px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">'
+    +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Passcode</label>'
+    +'<input id="cfgPass" type="password" placeholder="shared passcode" style="width:100%;box-sizing:border-box;padding:11px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">'
+    +'<div id="cfgMsg" style="min-height:18px;font-size:12.5px;margin:8px 2px 14px;color:#9aa"></div>'
+    +'<div style="display:flex;gap:10px">'
+    +'<button id="cfgTest" style="flex:1;padding:11px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;font-weight:600;font-size:14px;cursor:pointer">Test</button>'
+    +'<button id="cfgSave" style="flex:1;padding:11px;border-radius:12px;border:0;background:#4f7cff;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Save</button></div>'
+    +'<button id="cfgClose" style="width:100%;margin-top:10px;padding:9px;border-radius:12px;border:0;background:transparent;color:#8a93b0;font-size:13px;cursor:pointer">Cancel</button></div>';
+  document.body.appendChild(ov);
+  const $=s=>ov.querySelector(s), msg=$("#cfgMsg");
+  const norm=v=>v.trim().replace(/\/+$/,"");
+  gear.addEventListener("click",()=>{ $("#cfgUrl").value=cfg.proxyBase||""; $("#cfgPass").value=cfg.passcode||""; msg.textContent=""; ov.style.display="flex"; });
+  const close=()=>ov.style.display="none";
+  $("#cfgClose").addEventListener("click",close);
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  $("#cfgTest").addEventListener("click",async()=>{
+    const base=norm($("#cfgUrl").value);
+    if(!base){ msg.style.color="#9aa"; msg.textContent="No URL — staying in demo mode."; return; }
+    msg.style.color="#9aa"; msg.textContent="Testing…";
+    try{ const r=await fetch(base+"/health",{headers:{"X-Passcode":$("#cfgPass").value.trim()}}); const j=await r.json();
+      if(j.ok){ msg.style.color="#5fd38a"; msg.textContent="Connected ✓  Govee:"+(j.govee?"on":"off")+"  AI:"+(j.ai?"on":"off")+"  automations:"+j.automations; }
+      else { msg.style.color="#ffb4b4"; msg.textContent="Reached server but not OK."; }
+    }catch{ msg.style.color="#ffb4b4"; msg.textContent="Couldn't reach it — check the URL / passcode."; }
+  });
+  $("#cfgSave").addEventListener("click",()=>{
+    localStorage.setItem("gv_cfg",JSON.stringify({proxyBase:norm($("#cfgUrl").value),passcode:$("#cfgPass").value.trim()}));
+    location.reload();
+  });
+})();
+
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>

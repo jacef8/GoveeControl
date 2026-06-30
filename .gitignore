@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Secrets & local env
+.env
+.env.local
+
+# Runtime data stores (persist via DATA_DIR / Railway Volume, never commit)
+automations.json
+triggers.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db

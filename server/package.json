@@ -1,0 +1,16 @@
+{
+  "name": "govee-control-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Railway proxy for the Govee Control PWA: holds the Govee + Anthropic keys, proxies device control, generates AI scenes/schedules, runs automations on a cron.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3"
+  }
+}

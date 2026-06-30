@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0e1f" />
+<link rel="manifest" href="manifest.json" />
+<title>Govee · Scenes &amp; Automations</title>
+<style>
+  :root{
+    --ink:#eef2ff; --dim:#8b97b8; --accent:#6e8bff; --on:#39d98a; --avh:100dvh;
+    --glass:rgba(255,255,255,.05); --glass2:rgba(255,255,255,.09);
+    --stroke:rgba(255,255,255,.10); --stroke2:rgba(255,255,255,.17);
+    --line:rgba(255,255,255,.16); --bw:1px; --radius:18px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
+    font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:radial-gradient(125% 85% at 12% -5%, #1b1648 0%, #0c1024 52%, #070912 100%)}
+  body{display:flex; flex-direction:column}
+  header{flex:0 0 auto; padding:calc(15px + env(safe-area-inset-top)) 18px 14px;
+    display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--stroke);
+    background:rgba(255,255,255,.04); backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px)}
+  header h1{font-size:19px; margin:0; font-weight:650; letter-spacing:-.3px; flex:1; display:flex; align-items:center; gap:10px}
+  .logo{width:26px;height:26px;border-radius:9px;background:
+    conic-gradient(from 210deg,#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); box-shadow:0 0 18px rgba(120,140,255,.4)}
+  .tab{appearance:none; text-decoration:none; border:1px solid var(--stroke2); background:var(--glass);
+    color:#aeb6cc; font-weight:600; font-size:13px; padding:8px 14px; border-radius:13px; cursor:pointer; backdrop-filter:blur(10px)}
+  .tab.active{border-color:rgba(110,139,255,.5); color:#b9c6ff; background:rgba(110,139,255,.15)}
+  main{flex:1 1 auto; overflow:auto; padding:18px}
+  .sttl{font-size:13px; font-weight:600; color:#cdd6ee; margin:24px 2px 12px; display:flex; align-items:center; gap:8px}
+  .sttl:first-child{margin-top:4px}
+  textarea,input,select{background:rgba(255,255,255,.05); border:1px solid var(--stroke); border-radius:14px; color:var(--ink); font:15px system-ui; padding:11px 13px; width:100%; outline:none}
+  textarea:focus,input:focus,select:focus{border-color:rgba(110,139,255,.5); background:rgba(255,255,255,.07)}
+  textarea{resize:none}
+  .btn{appearance:none; border:1px solid var(--stroke2); background:var(--glass); color:#cdd6ee; font-weight:600; font-size:14px; padding:10px 15px; border-radius:14px; cursor:pointer; backdrop-filter:blur(10px); transition:transform .15s, background .2s}
+  .btn:hover{background:var(--glass2)}
+  .btn:active{transform:scale(.97)}
+  .btn.blue{border-color:rgba(110,139,255,.45); color:#b9c6ff; background:rgba(110,139,255,.15)}
+  .btn.green{border-color:rgba(57,217,138,.4); color:#7ff0b6; background:rgba(57,217,138,.12)}
+  .row{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
+  .ex{border:1px solid var(--stroke); background:var(--glass); color:#aeb6cc; font-size:12px; font-weight:600; padding:7px 12px; border-radius:11px; cursor:pointer}
+  .ex:hover{background:var(--glass2)}
+  .card{border:1px solid var(--stroke); border-radius:16px; background:var(--glass); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); padding:14px}
+  .card.hi{border-color:rgba(110,139,255,.5); box-shadow:0 8px 30px -14px rgba(110,139,255,.7)}
+  .saved{display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px}
+  .scell{cursor:pointer; transition:transform .15s, border-color .25s}
+  .scell:hover{border-color:var(--stroke2)}
+  .scell:active{transform:scale(.98)}
+  .bar{height:32px; border-radius:10px; overflow:hidden}
+  .pill{font-size:11px; padding:3px 9px; border-radius:9px; border:1px solid rgba(110,139,255,.35); color:#b9c6ff; background:rgba(110,139,255,.15)}
+  .arow{display:flex; align-items:center; gap:11px; border:1px solid var(--stroke); border-radius:16px; background:var(--glass); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); padding:12px 14px; margin-bottom:10px}
+  .sw{width:52px;height:30px;border-radius:16px;border:1px solid var(--stroke2);background:rgba(255,255,255,.05);position:relative;cursor:pointer;flex:0 0 auto;transition:.25s}
+  .sw .k{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#aeb6cc;transition:left .25s,background .25s;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+  .sw.on{border-color:rgba(57,217,138,.5);background:rgba(57,217,138,.22)}
+  .sw.on .k{left:26px;background:var(--on)}
+  footer{flex:0 0 auto; padding:13px 18px calc(13px + env(safe-area-inset-bottom)); border-top:1px solid var(--stroke); background:rgba(255,255,255,.03); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); font-size:12px; color:var(--dim); display:flex; gap:8px}
+  .badge{margin-left:auto; background:rgba(255,209,102,.12); color:#ffd166; font-weight:600; font-size:11px; border:1px solid rgba(255,209,102,.25); padding:3px 10px; border-radius:9px}
+</style>
+</head>
+<body>
+  <header>
+    <h1><span class="logo"></span> Scenes</h1>
+    <a class="tab" href="index.html">Lights</a>
+    <span class="tab active">Scenes</span>
+  </header>
+
+  <main>
+    <div class="sttl">Describe a scene</div>
+    <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
+    <div class="row" style="margin-top:9px">
+      <button id="ggen" class="btn blue">Generate</button>
+      <span id="gchips" class="row"></span>
+    </div>
+    <div id="gpreview" style="margin-top:13px"></div>
+
+    <div class="sttl">Scene library</div>
+    <div id="glibfilter" class="row" style="margin-bottom:11px"></div>
+    <div id="glibrary" class="saved"></div>
+
+    <div class="sttl">Device scenes <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· built into your lights</span></div>
+    <div id="gbuiltin" class="saved"></div>
+
+    <div class="sttl">Saved scenes</div>
+    <div id="gsaved" class="saved"></div>
+
+    <div class="sttl">Automations</div>
+    <div id="gauto"></div>
+    <div class="row" style="margin-top:10px; flex-wrap:nowrap">
+      <input id="gschin" placeholder="all lights off at 11pm" />
+      <button id="gschadd" class="btn">Add</button>
+    </div>
+
+    <div class="sttl">Event triggers <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· IFTTT</span></div>
+    <div style="font-size:13px;color:var(--dim);margin:0 2px 11px;line-height:1.5">
+      In IFTTT: <b>IF</b> a game score, time, or any event happens → <b>THEN</b> Webhooks: make a web request to the URL below.
+      Each event name maps to a light action here.</div>
+    <div class="card" style="margin-bottom:11px">
+      <div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Your webhook URL</div>
+      <code id="ghookurl" style="font-size:12px;color:#9bb4ff;word-break:break-all"></code>
+      <div style="font-size:11px;color:#6f7ea3;margin-top:6px">Replace the last part with any event name you map below.</div>
+    </div>
+    <div class="card" style="margin-bottom:11px;display:flex;align-items:center;gap:10px">
+      <div style="font-size:13px;font-weight:800">Team colors</div>
+      <select id="gteam" style="background:#0e1424;border:var(--bw) solid var(--line);border-radius:12px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
+      <span id="gteamsw"></span>
+    </div>
+    <div id="gtrig"></div>
+    <div class="row" style="margin-top:10px;flex-wrap:nowrap">
+      <input id="gtrigev" placeholder="touchdown" style="flex:1.3" />
+      <select id="gtrigact" style="background:#0e1424;border:var(--bw) solid var(--line);border-radius:12px;color:var(--ink);font:14px system-ui;padding:9px 10px">
+        <option value="flash">Flash colors</option>
+        <option value="allon">All lights on</option>
+        <option value="alloff">All lights off</option>
+      </select>
+      <button id="gtrigadd" class="btn">Add</button>
+    </div>
+  </main>
+
+  <footer><span id="gmsg">Type a vibe and Generate — the real app sends this to Claude.</span>
+    <span class="badge" id="modebadge">MOCK AI</span></footer>
+
+<script>
+/* ============================================================
+   CONFIG — shared with index.html. Flip USE_MOCK when the
+   Railway proxy + Anthropic key are live.
+   ============================================================ */
+const CONFIG = (() => {
+  // Set via the ⚙ Settings dialog; shared with index.html through localStorage.
+  // Mock mode stays on until a proxy URL is saved.
+  let s = {}; try { s = JSON.parse(localStorage.getItem("gv_cfg") || "{}"); } catch {}
+  const PROXY_BASE = (s.proxyBase || "").replace(/\/+$/, "");
+  return { USE_MOCK: !PROXY_BASE, PROXY_BASE, PASSCODE: s.passcode || "" };
+})();
+
+/* ============================================================
+   AI + ENGINE layer.  Same method names mock or live.
+   LIVE flow:
+     designScene(prompt) -> POST {PROXY_BASE}/ai/scene  (proxy calls Claude, returns Scene JSON)
+     applyScene(scene)   -> POST {PROXY_BASE}/govee/scene (engine runs frames / maps to built-in scene)
+     parseSchedule(text) -> POST {PROXY_BASE}/ai/schedule (Claude -> cron + action)
+     saveSchedule(s)     -> POST {PROXY_BASE}/automations (Railway cron persists + fires it)
+   ============================================================ */
+const LIGHTS = ["Living Room Lamp","TV Backlight","Kitchen Strip","Bedroom Bulb"];
+const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
+
+// Device list — mock names locally; the real list from the proxy when live.
+let DEVICES = [];
+async function loadDevices(){
+  if(CONFIG.USE_MOCK){ DEVICES = LIGHTS.map(n=>({device:n, deviceName:n})); return; }
+  try{
+    const r = await fetch(CONFIG.PROXY_BASE+"/govee/devices",{headers:{"X-Passcode":CONFIG.PASSCODE}});
+    DEVICES = (await r.json()).data || [];
+  }catch{ DEVICES = []; }
+}
+const deviceNames = () => DEVICES.length ? DEVICES.map(d=>d.deviceName) : LIGHTS;
+
+const RECIPES = [
+  {k:["party","rave","dance","disco","multicolor","colorful","rainbow"],name:"Party Pulse",motion:true,step:1100,via:"custom animator",cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
+  {k:["cozy","warm","movie","relax","chill","comfy","amber"],name:"Cozy Glow",motion:false,step:0,via:"static color",cols:[[255,150,70],[255,110,40],[255,180,110]]},
+  {k:["ocean","water","calm","sleep","cool","aqua","teal"],name:"Ocean Calm",motion:true,step:2600,via:"built-in scene: Aurora",cols:[[0,90,200],[0,180,180],[40,120,255],[0,210,160]]},
+  {k:["focus","work","study","bright","daylight","clean","white"],name:"Focus",motion:false,step:0,via:"static color",cols:[[255,255,255],[235,245,255]]},
+  {k:["sunset","dusk","golden","romantic","pink"],name:"Sunset Fade",motion:true,step:3000,via:"custom animator",cols:[[255,120,40],[255,80,120],[180,60,160],[90,50,150]]},
+  {k:["fire","flame","ember","candle","cabin"],name:"Firelight",motion:true,step:700,via:"custom animator",cols:[[255,70,0],[255,140,20],[255,40,0],[255,170,60]]},
+  {k:["holiday","christmas","xmas","festive"],name:"Holiday",motion:true,step:1500,via:"custom animator",cols:[[230,20,30],[20,180,60],[255,255,255]]}
+];
+
+async function designScene(prompt){
+  if(!CONFIG.USE_MOCK){
+    const r = await fetch(CONFIG.PROXY_BASE+"/ai/scene",{method:"POST",
+      headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+      body:JSON.stringify({prompt})});
+    return (await r.json()).scene;
+  }
+  // ---- mock "AI": keyword match into a Scene ----
+  const t=(prompt||"").toLowerCase();
+  let best=RECIPES.find(r=>r.k.some(w=>t.includes(w)));
+  if(!best)best={name:"Custom Mix",motion:true,step:1300,via:"custom animator",cols:[[255,60,120],[60,160,255],[120,255,140],[255,200,40]]};
+  return {name:best.name,motion:best.motion,step:best.step,via:best.via,cols:best.cols,targets:LIGHTS.slice()};
+}
+async function applyScene(s){
+  if(!CONFIG.USE_MOCK){ await fetch(CONFIG.PROXY_BASE+"/govee/scene",{method:"POST",
+    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify(s)}); }
+  return true;
+}
+
+/* ---------- preview rendering ---------- */
+let anim=null;
+const $=s=>document.querySelector(s);
+function msg(t){ $("#gmsg").textContent=t; }
+function stripHTML(cols,id){ return `<div id="${id}" class="bar" style="display:flex;gap:4px;border:2px solid var(--line)">`+
+  cols.map(c=>`<span style="flex:1;background:${rgb(c)}"></span>`).join("")+`</div>`; }
+
+function renderPreview(s){
+  if(anim){clearInterval(anim);anim=null;}
+  $("#gpreview").innerHTML = `<div class="card hi">
+    <div class="row" style="margin-bottom:10px"><span style="font-weight:800;font-size:16px">${s.name}</span>
+      <span class="pill">${s.motion?"moving":"static"}</span></div>
+    ${stripHTML(s.cols,"pvstrip")}
+    <div style="font-size:12px;color:var(--dim);margin-top:9px">${s.targets.length} lights · ${s.via}${s.motion?` · ${s.step/1000}s/step`:""}</div>
+    <div class="row" style="margin-top:11px">
+      <button id="gapply" class="btn green">Apply now</button>
+      <button id="gsave" class="btn">Save</button>
+    </div></div>`;
+  if(s.motion){ let off=0, strip=$("#pvstrip");
+    anim=setInterval(()=>{ off=(off+1)%s.cols.length;
+      [...strip.children].forEach((sp,i)=>sp.style.background=rgb(s.cols[(i+off)%s.cols.length])); }, s.step);
+  }
+  $("#gapply").onclick=async()=>{ await applyScene(s); msg(`Applied "${s.name}" to ${s.targets.length} lights`); };
+  $("#gsave").onclick=()=>{ addSaved(s); msg(`Saved "${s.name}"`); };
+}
+
+/* ---------- saved scenes ---------- */
+let SAVED=[];
+(async()=>{ SAVED=[await designScene("cozy movie"),await designScene("party"),await designScene("ocean"),await designScene("focus")]; renderSaved(); })();
+function renderSaved(){
+  $("#gsaved").innerHTML = SAVED.map((s,i)=>{
+    const grad=s.cols.map(rgb).join(",");
+    return `<div class="card scell" data-act="${i}">
+      <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
+      <div style="font-weight:800;font-size:14px;margin-top:8px">${s.name}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:2px">${s.motion?"moving":"static"} · tap to apply</div></div>`;
+  }).join("");
+}
+function addSaved(s){ if(SAVED.length>=8)SAVED.pop(); SAVED.unshift(s); renderSaved(); }
+
+/* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
+const LIB_CATS = ["All","Party","Calm","Nature","Holiday"];
+const PRESETS = [
+  {name:"Party Pulse",  cat:"Party", motion:true, step:1000, cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
+  {name:"Disco",        cat:"Party", motion:true, step:700,  cols:[[255,0,0],[255,140,0],[255,255,0],[0,200,0],[0,120,255],[150,0,255]]},
+  {name:"Neon City",    cat:"Party", motion:true, step:900,  cols:[[255,20,147],[0,255,255],[180,0,255],[255,0,90]]},
+  {name:"Rave",         cat:"Party", motion:true, step:600,  cols:[[0,255,255],[255,0,255],[80,255,0],[255,255,255]]},
+  {name:"Color Wave",   cat:"Party", motion:true, step:850,  cols:[[255,80,80],[255,200,80],[120,255,120],[80,200,255],[180,120,255]]},
+  {name:"Ocean Calm",   cat:"Calm",  motion:true, step:2600, cols:[[0,90,200],[0,160,180],[40,120,255],[0,210,160]]},
+  {name:"Sunset Fade",  cat:"Calm",  motion:true, step:3000, cols:[[255,120,40],[255,80,120],[180,60,160],[90,50,150]]},
+  {name:"Candlelight",  cat:"Calm",  motion:true, step:1400, cols:[[255,140,40],[255,110,30],[255,160,70],[230,90,20]]},
+  {name:"Cozy Glow",    cat:"Calm",  motion:false,step:0,    cols:[[255,150,70],[255,110,40],[255,180,110]]},
+  {name:"Moonlight",    cat:"Calm",  motion:true, step:3200, cols:[[40,60,120],[80,100,160],[150,170,210],[60,80,140]]},
+  {name:"Lava Lamp",    cat:"Calm",  motion:true, step:2800, cols:[[220,40,30],[255,90,20],[180,30,120],[120,20,160]]},
+  {name:"Aurora",       cat:"Nature",motion:true, step:2400, cols:[[20,200,140],[0,160,200],[80,80,220],[40,220,160]]},
+  {name:"Forest",       cat:"Nature",motion:true, step:2200, cols:[[20,120,40],[60,170,40],[120,200,60],[30,140,90]]},
+  {name:"Thunderstorm", cat:"Nature",motion:true, step:600,  cols:[[40,50,80],[200,210,255],[60,70,110],[255,255,255]]},
+  {name:"Firelight",    cat:"Nature",motion:true, step:700,  cols:[[255,70,0],[255,140,20],[255,40,0],[255,170,60]]},
+  {name:"Christmas",    cat:"Holiday",motion:true,step:1500, cols:[[230,20,30],[20,180,60],[255,255,255]]},
+  {name:"Halloween",    cat:"Holiday",motion:true,step:1200, cols:[[255,120,0],[150,0,255],[80,255,0]]},
+  {name:"Valentine",    cat:"Holiday",motion:true,step:1800, cols:[[255,40,90],[255,140,170],[255,255,255]]},
+  {name:"Stars & Stripes",cat:"Holiday",motion:true,step:1100,cols:[[220,30,40],[255,255,255],[30,60,200]]},
+];
+let libCat = "All";
+function renderLibFilter(){
+  $("#glibfilter").innerHTML = LIB_CATS.map(c=>
+    `<button class="ex" data-libcat="${c}" style="${c===libCat?'border-color:var(--accent);color:#9bb4ff;background:#13203f':''}">${c}</button>`).join("");
+}
+function renderLibrary(){
+  const list = PRESETS.filter(p=>libCat==="All"||p.cat===libCat);
+  $("#glibrary").innerHTML = list.map((p,i)=>{
+    const grad = p.cols.map(rgb).join(",");
+    return `<div class="card scell" data-lib="${PRESETS.indexOf(p)}">
+      <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
+      <div style="font-weight:800;font-size:14px;margin-top:8px">${p.name}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:2px">${p.cat} · ${p.motion?'moving':'static'}</div></div>`;
+  }).join("");
+}
+function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:deviceNames(), cols:p.cols}; }
+
+/* ---------- device built-in scenes (smooth, hardware-run) ---------- */
+async function getBuiltinScenes(){
+  if(CONFIG.USE_MOCK){
+    return ["Sunrise","Aurora","Rainbow","Sunset","Forest","Ocean","Candlelight","Party","Spring","Snowflake","Nebula","Fire"]
+      .map((n,i)=>({name:n, value:{id:i}, instance:"lightScene"}));
+  }
+  if(!DEVICES.length) return [];
+  const r = await fetch(CONFIG.PROXY_BASE+"/govee/scenes",{method:"POST",
+    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+    body:JSON.stringify({device:DEVICES[0].device})});
+  return (await r.json()).data || [];
+}
+async function activateBuiltin(s){
+  if(CONFIG.USE_MOCK) return true;
+  const targets = DEVICES.length ? DEVICES.map(d=>d.device) : [];
+  await Promise.all(targets.map(device=> fetch(CONFIG.PROXY_BASE+"/govee/scene/builtin",{method:"POST",
+    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+    body:JSON.stringify({device, value:s.value, instance:s.instance})})));
+  return true;
+}
+let BUILTIN = [];
+async function renderBuiltin(){
+  try{ BUILTIN = await getBuiltinScenes(); }catch{ BUILTIN = []; }
+  const el = $("#gbuiltin");
+  if(!BUILTIN.length){ el.innerHTML = '<div style="color:var(--dim);font-size:13px;padding:4px 2px">No built-in scenes found yet — they load once your lights are connected.</div>'; return; }
+  el.innerHTML = BUILTIN.map((s,i)=>`<div class="card scell" data-bi="${i}">
+    <div class="bar" style="background:linear-gradient(90deg,#3a2f5e,#1d9e75,#185fa5,#993c1d)"></div>
+    <div style="font-weight:800;font-size:14px;margin-top:8px">${s.name}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:2px">built-in · smooth</div></div>`).join("");
+}
+
+/* ---------- automations ---------- */
+let AUTO=[
+  {label:"All lights off",when:"11:00 PM daily",on:true},
+  {label:"Backyard on",when:"at sunset",on:true},
+  {label:"Kitchen to 40%",when:"6:30 AM weekdays",on:false}
+];
+function renderAuto(){
+  $("#gauto").innerHTML = AUTO.map((s,i)=>`<div class="arow">
+    <div style="flex:1"><div style="font-weight:800;font-size:15px">${s.label}</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:2px">${s.when}</div></div>
+    <div class="sw ${s.on?'on':''}" data-tog="${i}"><span class="k"></span></div></div>`).join("");
+}
+async function parseSchedule(text){
+  if(!CONFIG.USE_MOCK){ const r=await fetch(CONFIG.PROXY_BASE+"/ai/schedule",{method:"POST",
+    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify({text})});
+    return (await r.json()).schedule; }
+  const s=(text||"").toLowerCase(); let when="custom time",label=text;
+  const m=s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+  if(s.includes("sunset"))when="at sunset"; else if(s.includes("sunrise"))when="at sunrise";
+  else if(m){ const ap=m[3]?` ${m[3].toUpperCase()}`:""; when=`${m[1]}:${m[2]||"00"}${ap}${s.includes("weekday")?" weekdays":" daily"}`; }
+  if(s.includes("off"))label="Lights off"; else if(s.includes("on"))label="Lights on";
+  if(s.includes("all"))label=`All lights ${s.includes("off")?"off":"on"}`;
+  if(s.includes("backyard"))label=label.replace("Lights","Backyard");
+  if(s.includes("kitchen"))label=label.replace("Lights","Kitchen");
+  return {label,when,on:true};
+}
+
+/* ---------- event triggers (IFTTT inbound webhooks) ---------- */
+const phdr = () => ({ "Content-Type":"application/json", "X-Passcode": CONFIG.PASSCODE });
+
+// Team color presets: name -> [primary rgb, secondary rgb]
+const TEAMS = {
+  "Falcons":[[167,25,48],[0,0,0]],            "Bulldogs (UGA)":[[186,12,47],[0,0,0]],
+  "Georgia Tech":[[179,163,105],[0,48,87]],   "Braves":[[206,17,65],[19,39,79]],
+  "Chiefs":[[227,24,55],[255,184,28]],        "Eagles":[[0,76,84],[165,172,175]],
+  "Cowboys":[[0,34,68],[134,147,151]],        "49ers":[[170,0,0],[173,153,93]],
+  "Bills":[[0,51,141],[198,12,48]],           "Ravens":[[26,25,95],[158,124,12]],
+  "Packers":[[24,48,40],[255,184,28]],        "Dolphins":[[0,142,151],[252,76,2]],
+  "Patriots":[[0,34,68],[198,12,48]],         "Steelers":[[16,24,32],[255,182,18]],
+  "Saints":[[211,188,141],[16,24,31]],        "Seahawks":[[0,34,68],[105,190,40]],
+  "Crimson Tide (Bama)":[[158,27,50],[130,138,143]], "Tigers (LSU)":[[70,29,124],[253,208,35]],
+  "Custom":[[255,60,60],[255,255,255]],
+};
+let team = localStorage.getItem("gv_team") || "Falcons";
+const teamCols = () => TEAMS[team] || TEAMS["Custom"];
+
+const ACT_LABEL = { flash:"Flash team colors", allon:"All lights on", alloff:"All lights off" };
+function buildAction(sel){
+  if(sel==="allon")  return {kind:"allOn"};
+  if(sel==="alloff") return {kind:"allOff"};
+  return {kind:"flash", cols:teamCols(), times:3};
+}
+
+let TRIGGERS = [
+  {id:"t1", event:"touchdown", label:"Flash team colors ×3", action:{kind:"flash", cols:teamCols(), times:3}, enabled:true},
+  {id:"t2", event:"gametime",  label:"All lights on",        action:{kind:"allOn"}, enabled:true},
+  {id:"t3", event:"win",       label:"Victory flash ×5",      action:{kind:"flash", cols:teamCols(), times:5}, enabled:false},
+];
+
+// CRUD — local in mock, persisted through the proxy when live
+async function trigGet(){
+  if(CONFIG.USE_MOCK) return TRIGGERS;
+  try{ const r=await fetch(CONFIG.PROXY_BASE+"/triggers",{headers:{"X-Passcode":CONFIG.PASSCODE}}); return (await r.json()).data||[]; }
+  catch{ return []; }
+}
+async function trigAdd(t){
+  if(CONFIG.USE_MOCK){ t.id="t"+Date.now(); TRIGGERS.unshift(t); return t; }
+  const r=await fetch(CONFIG.PROXY_BASE+"/triggers",{method:"POST",headers:phdr(),body:JSON.stringify(t)});
+  const saved=(await r.json()).data; TRIGGERS.unshift(saved); return saved;
+}
+async function trigPatch(id,patch){
+  const t=TRIGGERS.find(x=>x.id===id); if(t) Object.assign(t,patch);
+  if(!CONFIG.USE_MOCK) await fetch(CONFIG.PROXY_BASE+"/triggers/"+id,{method:"PATCH",headers:phdr(),body:JSON.stringify(patch)});
+}
+async function trigDel(id){
+  TRIGGERS=TRIGGERS.filter(x=>x.id!==id);
+  if(!CONFIG.USE_MOCK) await fetch(CONFIG.PROXY_BASE+"/triggers/"+id,{method:"DELETE",headers:{"X-Passcode":CONFIG.PASSCODE}});
+}
+
+function hookUrl(ev){
+  const base = CONFIG.PROXY_BASE || "https://your-railway-url";
+  const tok  = CONFIG.PASSCODE || "<token>";
+  return `${base}/hook/${tok}/${ev||"<event>"}`;
+}
+function swatch(c){ return `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:rgb(${c[0]},${c[1]},${c[2]});border:2px solid rgba(255,255,255,.22);vertical-align:-3px"></span>`; }
+function renderTeam(){
+  const sel=$("#gteam"); if(!sel) return;
+  sel.innerHTML = Object.keys(TEAMS).map(t=>`<option ${t===team?'selected':''}>${t}</option>`).join("");
+  const c=teamCols(); $("#gteamsw").innerHTML = swatch(c[0])+" "+swatch(c[1]);
+}
+function renderTriggers(){
+  $("#ghookurl").textContent = hookUrl(TRIGGERS[0]?.event || "touchdown");
+  $("#gtrig").innerHTML = TRIGGERS.map((t)=>`<div class="arow">
+    <div style="flex:1"><div style="font-weight:800;font-size:15px">${t.event}</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:2px">→ ${t.label}</div></div>
+    <div class="sw ${t.enabled?'on':''}" data-trtog="${t.id}"><span class="k"></span></div>
+    <button class="ex" data-trdel="${t.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:8px">✕</button></div>`).join("");
+}
+$("#ggen").onclick=async()=>{ const p=$("#gp").value||"multicolored moving party";
+  msg("Generating scene…"); const s=await designScene(p); renderPreview(s);
+  msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`); };
+$("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
+$("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;
+  AUTO.unshift(await parseSchedule(v)); $("#gschin").value=""; renderAuto();
+  msg("Automation added — Claude parses the time + action, Railway cron fires it"); };
+$("#gtrigadd").onclick=async()=>{
+  const ev=$("#gtrigev").value.trim().toLowerCase().replace(/\s+/g,"_"); if(!ev)return;
+  const sel=$("#gtrigact").value;
+  await trigAdd({ event:ev, label:ACT_LABEL[sel], action:buildAction(sel), enabled:true });
+  $("#gtrigev").value=""; renderTriggers();
+  msg(`Trigger added — point an IFTTT applet at ${hookUrl(ev)}`); };
+$("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team",team); renderTeam();
+  msg(`Team set to ${team} — new score triggers use these colors`); };
+document.addEventListener("click", async e=>{
+  const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
+  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; renderPreview(s); await applyScene(s); msg(`Applied "${s.name}"`); return; }
+  const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; renderLibFilter(); renderLibrary(); return; }
+  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); renderPreview(s); await applyScene(s); msg(`Activated "${p.name}"`); return; }
+  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; await activateBuiltin(s); msg(`Activated built-in "${s.name}"`); return; }
+  const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
+  const trd=e.target.closest("[data-trdel]"); if(trd){ const id=trd.dataset.trdel; const ev=(TRIGGERS.find(x=>x.id===id)||{}).event; await trigDel(id); renderTriggers(); msg(`Removed trigger "${ev}"`); return; }
+  const tg=e.target.closest("[data-tog]"); if(tg){ const i=+tg.dataset.tog; AUTO[i].on=!AUTO[i].on; renderAuto(); msg(AUTO[i].label+(AUTO[i].on?" enabled":" paused")); return; }
+});
+$("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
+renderLibFilter(); renderLibrary(); renderAuto(); renderTeam(); renderTriggers();
+(async()=>{
+  await loadDevices(); renderBuiltin();
+  if(!CONFIG.USE_MOCK){ TRIGGERS = await trigGet(); renderTriggers(); }
+})();
+/* ============================================================
+   SETTINGS  — proxy URL + passcode, stored in localStorage (gv_cfg).
+   No code edits, no secrets in the repo; shared by both pages.
+   ============================================================ */
+(function(){
+  let cfg={}; try{ cfg=JSON.parse(localStorage.getItem("gv_cfg")||"{}"); }catch{}
+  const header=document.querySelector("header"); if(!header) return;
+  const gear=document.createElement("button");
+  gear.title="Settings"; gear.textContent="⚙"; gear.setAttribute("data-cfg","1");
+  gear.style.cssText="margin-left:auto;padding:7px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:inherit;font-size:15px;line-height:1;cursor:pointer";
+  header.appendChild(gear);
+
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:20px";
+  ov.innerHTML=
+    '<div style="width:min(420px,92vw);box-sizing:border-box;background:rgba(22,26,48,.94);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:22px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)">'
+    +'<h2 style="margin:0 0 4px;font-size:19px;font-weight:600">Connect to your lights</h2>'
+    +'<p style="margin:0 0 16px;color:#aab;font-size:13px;line-height:1.5">Leave the URL blank to stay in demo mode. Fill it in once your Railway proxy is deployed.</p>'
+    +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Proxy URL</label>'
+    +'<input id="cfgUrl" placeholder="https://your-app.up.railway.app" style="width:100%;box-sizing:border-box;padding:11px 13px;margin-bottom:14px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">'
+    +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Passcode</label>'
+    +'<input id="cfgPass" type="password" placeholder="shared passcode" style="width:100%;box-sizing:border-box;padding:11px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">'
+    +'<div id="cfgMsg" style="min-height:18px;font-size:12.5px;margin:8px 2px 14px;color:#9aa"></div>'
+    +'<div style="display:flex;gap:10px">'
+    +'<button id="cfgTest" style="flex:1;padding:11px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;font-weight:600;font-size:14px;cursor:pointer">Test</button>'
+    +'<button id="cfgSave" style="flex:1;padding:11px;border-radius:12px;border:0;background:#4f7cff;color:#fff;font-weight:600;font-size:14px;cursor:pointer">Save</button></div>'
+    +'<button id="cfgClose" style="width:100%;margin-top:10px;padding:9px;border-radius:12px;border:0;background:transparent;color:#8a93b0;font-size:13px;cursor:pointer">Cancel</button></div>';
+  document.body.appendChild(ov);
+  const $=s=>ov.querySelector(s), msg=$("#cfgMsg");
+  const norm=v=>v.trim().replace(/\/+$/,"");
+  gear.addEventListener("click",()=>{ $("#cfgUrl").value=cfg.proxyBase||""; $("#cfgPass").value=cfg.passcode||""; msg.textContent=""; ov.style.display="flex"; });
+  const close=()=>ov.style.display="none";
+  $("#cfgClose").addEventListener("click",close);
+  ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
+  $("#cfgTest").addEventListener("click",async()=>{
+    const base=norm($("#cfgUrl").value);
+    if(!base){ msg.style.color="#9aa"; msg.textContent="No URL — staying in demo mode."; return; }
+    msg.style.color="#9aa"; msg.textContent="Testing…";
+    try{ const r=await fetch(base+"/health",{headers:{"X-Passcode":$("#cfgPass").value.trim()}}); const j=await r.json();
+      if(j.ok){ msg.style.color="#5fd38a"; msg.textContent="Connected ✓  Govee:"+(j.govee?"on":"off")+"  AI:"+(j.ai?"on":"off")+"  automations:"+j.automations; }
+      else { msg.style.color="#ffb4b4"; msg.textContent="Reached server but not OK."; }
+    }catch{ msg.style.color="#ffb4b4"; msg.textContent="Couldn't reach it — check the URL / passcode."; }
+  });
+  $("#cfgSave").addEventListener("click",()=>{
+    localStorage.setItem("gv_cfg",JSON.stringify({proxyBase:norm($("#cfgUrl").value),passcode:$("#cfgPass").value.trim()}));
+    location.reload();
+  });
+})();
+
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>

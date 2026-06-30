@@ -529,17 +529,15 @@ function openGroups(){
     ov.addEventListener("click", e=>{ if(e.target===ov) ov.style.display="none"; });
     // delegated actions inside the modal
     ov.addEventListener("change", async e=>{
-      const chk = e.target.closest("[data-gchk]");
-      if(chk){ const gid=chk.dataset.gchk, dev=chk.dataset.dev, g=GROUPS.find(x=>x.id===gid); if(!g) return;
-        if(chk.checked){
-          for(const og of GROUPS){ if(og.id!==gid && (og.devices||[]).includes(dev)){
-            const nd=og.devices.filter(x=>x!==dev); await GroupsAPI.update(og.id,{devices:nd}); og.devices=nd; } }
-          if(!(g.devices||[]).includes(dev)){ const nd=(g.devices||[]).concat(dev); await GroupsAPI.update(gid,{devices:nd}); g.devices=nd; }
-        } else { const nd=(g.devices||[]).filter(x=>x!==dev); await GroupsAPI.update(gid,{devices:nd}); g.devices=nd; }
+      const as = e.target.closest("[data-gassign]");
+      if(as){ const dev=as.dataset.gassign, gid=as.value;
+        // exclusive: drop the light from any group it's in, then add to the chosen one
+        for(const g of GROUPS){ if((g.devices||[]).includes(dev)){ const nd=g.devices.filter(x=>x!==dev); await GroupsAPI.update(g.id,{devices:nd}); g.devices=nd; } }
+        if(gid){ const g=GROUPS.find(x=>x.id===gid); if(g){ const nd=(g.devices||[]).concat(dev); await GroupsAPI.update(gid,{devices:nd}); g.devices=nd; } }
         renderGroupsModal(); load(); return;
       }
       const rn = e.target.closest("[data-grename]");
-      if(rn){ await GroupsAPI.update(rn.dataset.grename,{name:rn.value.trim()||"Group"}); GROUPS=await GroupsAPI.list(); load(); return; }
+      if(rn){ await GroupsAPI.update(rn.dataset.grename,{name:rn.value.trim()||"Group"}); GROUPS=await GroupsAPI.list(); renderGroupsModal(); load(); return; }
     });
     ov.addEventListener("click", async e=>{
       const del = e.target.closest("[data-grdel]");
@@ -551,36 +549,32 @@ function openGroups(){
 }
 async function renderGroupsModal(){
   const card = document.getElementById("grpCard");
+  try{ GROUPS = await GroupsAPI.list(); }catch{ GROUPS = []; }
+  const esc = s => (s||"").replace(/[<>"]/g, c=>({'<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const ofDev = {}; GROUPS.forEach(g=>(g.devices||[]).forEach(id=>ofDev[id]=g.id));  // light -> its group
+  const groupRows = GROUPS.length ? GROUPS.map(g=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input value="${esc(g.name)}" data-grename="${g.id}" style="flex:1;box-sizing:border-box;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-weight:600;font-size:14px">
+        <span style="font-size:12px;color:#8a93b0;min-width:18px;text-align:center">${(g.devices||[]).length}</span>
+        <button data-grdel="${g.id}" style="border:1px solid #6e2f2f;background:rgba(255,80,80,.12);color:#ff8a8a;border-radius:6px;padding:8px 12px;font-weight:600;cursor:pointer">Delete</button>
+      </div>`).join("") : '<div style="color:#8a93b0;font-size:13px;padding:2px 0 8px">No groups yet — add one above.</div>';
+  const optsFor = sel => `<option value=""${sel?'':' selected'}>Ungrouped</option>`+GROUPS.map(g=>`<option value="${g.id}"${g.id===sel?' selected':''}>${esc(g.name)}</option>`).join("");
+  const lightRows = DEVICES.length ? DEVICES.map(d=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06)">
+        <span style="flex:1;min-width:0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.deviceName)}</span>
+        <select data-gassign="${d.device}" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:6px;color:#fff;font-size:13px;padding:7px 8px">${optsFor(ofDev[d.device])}</select>
+      </div>`).join("") : '<div style="color:#8a93b0;font-size:13px">No lights loaded — open this on the live dashboard.</div>';
   card.innerHTML =
     '<div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:19px;font-weight:600;flex:1">Manage groups</h2><button id="grpClose" style="border:0;background:transparent;color:#8a93b0;font-size:20px;cursor:pointer">✕</button></div>'
-    +'<p style="margin:0 0 14px;color:#aab;font-size:12.5px;line-height:1.5">Organize your lights into rooms/zones. Each group gets its own On/Off, brightness, and color — and can be targeted by timers on the Scenes page.</p>'
-    +'<div style="display:flex;gap:8px;margin-bottom:16px"><input id="grpNew" placeholder="New group name (e.g. Living Room)" style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px"><button id="grpAdd" style="padding:10px 16px;border-radius:11px;border:0;background:#4f7cff;color:#fff;font-weight:600;cursor:pointer">Add</button></div>'
-    +'<div id="grpList">Loading…</div>';
+    +'<p style="margin:0 0 14px;color:#aab;font-size:12.5px;line-height:1.5">Create groups, then set each light’s group below. A light belongs to one group at a time.</p>'
+    +'<div style="display:flex;gap:8px;margin-bottom:18px"><input id="grpNew" placeholder="New group name (e.g. Living Room)" style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px"><button id="grpAdd" style="padding:10px 16px;border-radius:6px;border:0;background:#4f7cff;color:#fff;font-weight:600;cursor:pointer">Add</button></div>'
+    +'<div style="font-size:11.5px;color:#8a93b0;font-weight:700;letter-spacing:.5px;margin-bottom:9px">GROUPS</div>'+groupRows
+    +'<div style="font-size:11.5px;color:#8a93b0;font-weight:700;letter-spacing:.5px;margin:18px 0 2px">ASSIGN LIGHTS</div>'+lightRows;
   card.querySelector("#grpClose").onclick = ()=> document.getElementById("grpOverlay").style.display="none";
   card.querySelector("#grpAdd").onclick = async ()=>{
     const name = card.querySelector("#grpNew").value.trim(); if(!name) return;
     await GroupsAPI.add(name); GROUPS = await GroupsAPI.list(); renderGroupsModal();
   };
-  try{ GROUPS = await GroupsAPI.list(); }catch{ GROUPS = []; }
-  const list = card.querySelector("#grpList");
-  if(!GROUPS.length){
-    list.innerHTML = '<div style="color:#8a93b0;font-size:13px;text-align:center;padding:18px">No groups yet. Add one above, then check the lights that belong to it.</div>';
-    return;
-  }
-  list.innerHTML = GROUPS.map(g=>{
-    const checks = DEVICES.map(d=>{
-      const inG = (g.devices||[]).includes(d.device);
-      return `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13.5px;cursor:pointer"><input type="checkbox" ${inG?'checked':''} data-gchk="${g.id}" data-dev="${d.device}" style="width:16px;height:16px">${d.deviceName} <span style="color:#6f7ea3;font-size:11px">${d.sku||''}</span></label>`;
-    }).join("");
-    const nm = (g.name||"").replace(/"/g,'&quot;');
-    return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px;margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <input value="${nm}" data-grename="${g.id}" style="flex:1;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-weight:600;font-size:14px">
-        <button data-grdel="${g.id}" style="border:1px solid #6e2f2f;background:rgba(255,80,80,.12);color:#ff8a8a;border-radius:9px;padding:8px 12px;font-weight:600;cursor:pointer">Delete</button>
-      </div>
-      <div style="max-height:190px;overflow:auto">${checks || '<span style="color:#8a93b0;font-size:13px">No lights loaded — open this on the live dashboard.</span>'}</div>
-    </div>`;
-  }).join("");
 }
 
 /* ============================================================

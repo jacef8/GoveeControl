@@ -49,15 +49,16 @@
     conic-gradient(from 210deg,#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e);
     box-shadow:0 2px 10px rgba(120,140,255,.4)}
   .icon{appearance:none; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink);
-    width:40px; height:40px; border-radius:12px; font-size:18px; cursor:pointer; transition:transform .15s}
+    width:40px; height:40px; border-radius:6px; font-size:18px; cursor:pointer; transition:transform .15s}
   .icon:active{transform:scale(.94)}
-  .actions{display:flex; gap:8px}
-  .act{flex:1; appearance:none; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink);
-    font:600 14.5px 'Inter',system-ui; padding:11px 6px; border-radius:13px; cursor:pointer; text-decoration:none;
-    display:flex; align-items:center; justify-content:center; transition:transform .15s, background .2s}
-  .act:active{transform:scale(.97)}
-  .act.on{border-color:color-mix(in srgb,var(--on) 50%,transparent); color:var(--on); background:color-mix(in srgb,var(--on) 13%,var(--surface))}
-  .act.off{border-color:color-mix(in srgb,var(--off) 45%,transparent); color:var(--off); background:color-mix(in srgb,var(--off) 11%,var(--surface))}
+  .actions{display:flex; border:1px solid var(--line-strong); border-radius:6px; overflow:hidden; background:var(--surface-2)}
+  .act{flex:1; appearance:none; border:0; border-left:1px solid var(--line-strong); background:transparent; color:var(--ink);
+    font:600 14px 'Inter',system-ui; padding:12px 6px; border-radius:0; cursor:pointer; text-decoration:none;
+    display:flex; align-items:center; justify-content:center; transition:background .15s}
+  .act:first-child{border-left:0}
+  .act:active{background:var(--line)}
+  .act.on{color:var(--on); background:color-mix(in srgb,var(--on) 13%,var(--surface))}
+  .act.off{color:var(--off); background:color-mix(in srgb,var(--off) 11%,var(--surface))}
   /* ---------- scroll body ---------- */
   main{flex:1 1 auto; overflow:auto; padding:18px 16px 34px; -webkit-overflow-scrolling:touch}
   .grpttl{font-size:17px; font-weight:700; color:var(--ink); margin:24px 4px 13px; letter-spacing:-.3px;
@@ -92,9 +93,9 @@
   .dot.off2{background:var(--off); box-shadow:0 0 8px color-mix(in srgb,var(--off) 70%,transparent)}
   /* power switch */
   .pwr{margin-left:auto; flex:0 0 auto}
-  .sw{width:54px;height:32px;border-radius:17px;border:1px solid var(--line-strong);
+  .sw{width:54px;height:32px;border-radius:6px;border:1px solid var(--line-strong);
     background:var(--surface-2); position:relative; cursor:pointer; transition:.25s}
-  .sw .knob{position:absolute; top:3px; left:3px; width:24px;height:24px;border-radius:50%;
+  .sw .knob{position:absolute; top:3px; left:3px; width:24px;height:24px;border-radius:4px;
     background:var(--ink-faint); transition:left .25s, background .25s; box-shadow:0 1px 4px rgba(0,0,0,.25)}
   .card.on .sw{background:color-mix(in srgb,var(--on) 22%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
   .card.on .sw .knob{left:27px; background:var(--on)}
@@ -104,22 +105,22 @@
   .lbl{display:flex; justify-content:space-between; font-size:13px; color:var(--ink-2);
     font-weight:500; margin-bottom:9px}
   .lbl span:last-child{color:var(--ink); font-weight:600}
-  input[type=range]{width:100%; appearance:none; height:7px; border-radius:7px; cursor:pointer;
+  input[type=range]{width:100%; appearance:none; height:7px; border-radius:2px; cursor:pointer;
     background:linear-gradient(90deg,var(--cardc,#3a6df0) var(--p,60%),var(--line-strong) var(--p,60%))}
-  input[type=range]::-webkit-slider-thumb{appearance:none; width:22px;height:22px;border-radius:50%;
+  input[type=range]::-webkit-slider-thumb{appearance:none; width:20px;height:20px;border-radius:3px;
     background:#fff; border:none; box-shadow:0 1px 5px rgba(0,0,0,.3), 0 0 0 2px color-mix(in srgb,var(--cardc,#3a6df0) 60%, transparent)}
   input[type=range]:disabled{opacity:.4}
   /* color row */
   .colors{display:flex; align-items:center; gap:11px; flex-wrap:wrap; margin-top:16px; position:relative; z-index:1}
-  .swatch{width:28px;height:28px;border-radius:50%; border:2px solid var(--line-strong); cursor:pointer; transition:transform .15s}
+  .swatch{width:28px;height:28px;border-radius:4px; border:2px solid var(--line-strong); cursor:pointer; transition:transform .15s}
   .swatch:active{transform:scale(.88)}
   .swatch.sel{border-color:var(--ink); box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 13%,transparent)}
   /* native color input styled as a round, directly-clickable swatch */
   input[type=color].picker{appearance:none; -webkit-appearance:none; padding:0; cursor:pointer;
     background:conic-gradient(#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e)}
-  input[type=color].picker::-webkit-color-swatch-wrapper{padding:0; border-radius:50%}
-  input[type=color].picker::-webkit-color-swatch{border:none; border-radius:50%}
-  input[type=color].picker::-moz-color-swatch{border:none; border-radius:50%}
+  input[type=color].picker::-webkit-color-swatch-wrapper{padding:0; border-radius:3px}
+  input[type=color].picker::-webkit-color-swatch{border:none; border-radius:3px}
+  input[type=color].picker::-moz-color-swatch{border:none; border-radius:3px}
   input[type=color].picker:disabled{opacity:.4; cursor:not-allowed}
   /* footer status */
   footer{flex:0 0 auto; padding:12px 18px calc(12px + env(safe-area-inset-bottom));
@@ -140,15 +141,15 @@
   @media (min-width:640px){ .bento{grid-template-columns:repeat(2,minmax(0,1fr))} .tile.wide{grid-column:span 2} }
   @media (min-width:1080px){ .bento{grid-template-columns:repeat(3,minmax(0,1fr))} }
   .tile{position:relative; display:flex; flex-direction:column; gap:13px; overflow:hidden;
-    background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:16px 17px; box-shadow:var(--shadow-card)}
+    background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:16px 17px; box-shadow:var(--shadow-card)}
   .thead{display:flex; align-items:center; gap:11px}
   .tname{flex:1; font-size:16.5px; font-weight:700; letter-spacing:-.3px; color:var(--ink);
     display:flex; align-items:baseline; gap:9px; min-width:0}
   .tname .tcount{font-size:12.5px; font-weight:500; color:var(--ink-faint)}
   /* group master toggle */
-  .gsw{width:52px;height:30px;border-radius:16px;border:1px solid var(--line-strong); background:var(--surface-2);
+  .gsw{width:52px;height:30px;border-radius:6px;border:1px solid var(--line-strong); background:var(--surface-2);
     position:relative; cursor:pointer; flex:0 0 auto; transition:.25s}
-  .gsw .gk{position:absolute; top:3px; left:3px; width:22px;height:22px;border-radius:50%;
+  .gsw .gk{position:absolute; top:3px; left:3px; width:22px;height:22px;border-radius:4px;
     background:var(--ink-faint); transition:left .25s, background .25s; box-shadow:0 1px 4px rgba(0,0,0,.25)}
   .gsw.on{background:color-mix(in srgb,var(--on) 24%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
   .gsw.on .gk{left:25px; background:var(--on)}
@@ -158,12 +159,12 @@
   /* light chips inside a tile */
   .lites{display:grid; grid-template-columns:1fr; gap:10px}
   @media (min-width:520px){ .tile.wide .lites{grid-template-columns:1fr 1fr} }
-  .lite{background:var(--surface-2); border:1px solid var(--line); border-radius:14px; padding:12px 13px;
+  .lite{background:var(--surface-2); border:1px solid var(--line); border-radius:5px; padding:12px 13px;
     display:flex; flex-direction:column; gap:11px; transition:border-color .3s}
   .lite.on{border-color:color-mix(in srgb,var(--litec,#3a6df0) 50%,var(--line))}
   .lite.offline{opacity:.5}
   .literow{display:flex; align-items:center; gap:10px}
-  .litedot{width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:var(--litec,#888);
+  .litedot{width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:var(--litec,#888);
     box-shadow:0 0 8px color-mix(in srgb,var(--litec,#888) 60%,transparent)}
   .litename{flex:1; min-width:0; font-size:14.5px; font-weight:600; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
@@ -177,7 +178,7 @@
   /* toast */
   #toast{position:fixed; left:50%; bottom:78px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--surface);
-    padding:13px 22px; border-radius:14px; font-weight:600; font-size:14.5px; opacity:0;
+    padding:13px 22px; border-radius:6px; font-weight:600; font-size:14.5px; opacity:0;
     transition:opacity .25s, transform .25s; pointer-events:none; z-index:50; max-width:88vw;
     box-shadow:0 12px 40px -10px rgba(0,0,0,.4)}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
@@ -523,7 +524,7 @@ function openGroups(){
   if(!ov){
     ov = document.createElement("div"); ov.id = "grpOverlay";
     ov.style.cssText = "position:fixed;inset:0;z-index:150;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:18px";
-    ov.innerHTML = '<div id="grpCard" style="width:min(460px,94vw);max-height:84vh;overflow:auto;box-sizing:border-box;background:rgba(22,26,48,.95);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:20px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)"></div>';
+    ov.innerHTML = '<div id="grpCard" style="width:min(460px,94vw);max-height:84vh;overflow:auto;box-sizing:border-box;background:rgba(22,26,48,.95);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:20px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)"></div>';
     document.body.appendChild(ov);
     ov.addEventListener("click", e=>{ if(e.target===ov) ov.style.display="none"; });
     // delegated actions inside the modal
@@ -591,13 +592,13 @@ async function renderGroupsModal(){
   const header=document.querySelector("header"); if(!header) return;
   const gear=document.createElement("button");
   gear.title="Settings"; gear.textContent="⚙"; gear.setAttribute("data-cfg","1");
-  gear.style.cssText="margin-left:6px;flex:0 0 auto;width:40px;height:40px;border-radius:12px;border:1px solid var(--line-strong,var(--line,rgba(128,128,128,.35)));background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer";
+  gear.style.cssText="margin-left:6px;flex:0 0 auto;width:40px;height:40px;border-radius:6px;border:1px solid var(--line-strong,var(--line,rgba(128,128,128,.35)));background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer";
   (header.querySelector(".appbar")||header).appendChild(gear);
 
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:20px";
   ov.innerHTML=
-    '<div style="width:min(420px,92vw);box-sizing:border-box;background:rgba(22,26,48,.94);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:22px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)">'
+    '<div style="width:min(420px,92vw);box-sizing:border-box;background:rgba(22,26,48,.94);border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:22px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)">'
     +'<h2 style="margin:0 0 4px;font-size:19px;font-weight:600">Connect to your lights</h2>'
     +'<p style="margin:0 0 16px;color:#aab;font-size:13px;line-height:1.5">The URL is pre-filled to this site. Enter your passcode and Save to connect to your real lights.</p>'
     +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Proxy URL</label>'

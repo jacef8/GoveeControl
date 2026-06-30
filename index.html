@@ -134,6 +134,46 @@
     font-weight:600;font-size:12px; border:1px solid color-mix(in srgb,#f5a623 35%,transparent)}
   @media (prefers-color-scheme: dark){ .badge{color:#ffd166} }
   .empty{color:var(--ink-2); text-align:center; padding:60px 20px; font-size:15px}
+  /* ---------- bento dashboard ---------- */
+  .summary{font-size:14px; color:var(--ink-2); font-weight:500; margin:2px 4px 16px}
+  .bento{display:grid; grid-template-columns:1fr; gap:14px; grid-auto-flow:dense}
+  @media (min-width:640px){ .bento{grid-template-columns:repeat(2,minmax(0,1fr))} .tile.wide{grid-column:span 2} }
+  @media (min-width:1080px){ .bento{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  .tile{position:relative; display:flex; flex-direction:column; gap:13px; overflow:hidden;
+    background:var(--surface); border:1px solid var(--line); border-radius:20px; padding:16px 17px; box-shadow:var(--shadow-card)}
+  .thead{display:flex; align-items:center; gap:11px}
+  .tname{flex:1; font-size:16.5px; font-weight:700; letter-spacing:-.3px; color:var(--ink);
+    display:flex; align-items:baseline; gap:9px; min-width:0}
+  .tname .tcount{font-size:12.5px; font-weight:500; color:var(--ink-faint)}
+  /* group master toggle */
+  .gsw{width:52px;height:30px;border-radius:16px;border:1px solid var(--line-strong); background:var(--surface-2);
+    position:relative; cursor:pointer; flex:0 0 auto; transition:.25s}
+  .gsw .gk{position:absolute; top:3px; left:3px; width:22px;height:22px;border-radius:50%;
+    background:var(--ink-faint); transition:left .25s, background .25s; box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .gsw.on{background:color-mix(in srgb,var(--on) 24%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
+  .gsw.on .gk{left:25px; background:var(--on)}
+  .tctrl{display:flex; align-items:center; gap:13px; flex-wrap:wrap}
+  .tctrl input[type=range]{flex:1; min-width:120px; height:7px}
+  .tswatch{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+  /* light chips inside a tile */
+  .lites{display:grid; grid-template-columns:1fr; gap:10px}
+  @media (min-width:520px){ .tile.wide .lites{grid-template-columns:1fr 1fr} }
+  .lite{background:var(--surface-2); border:1px solid var(--line); border-radius:14px; padding:12px 13px;
+    display:flex; flex-direction:column; gap:11px; transition:border-color .3s}
+  .lite.on{border-color:color-mix(in srgb,var(--litec,#3a6df0) 50%,var(--line))}
+  .lite.offline{opacity:.5}
+  .literow{display:flex; align-items:center; gap:10px}
+  .litedot{width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:var(--litec,#888);
+    box-shadow:0 0 8px color-mix(in srgb,var(--litec,#888) 60%,transparent)}
+  .litename{flex:1; min-width:0; font-size:14.5px; font-weight:600; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .literow2{display:flex; align-items:center; gap:11px}
+  .literow2 input[type=range]{flex:1; height:6px}
+  .lite .sw{width:46px;height:26px}
+  .lite .sw .knob{width:20px;height:20px;top:2px;left:2px}
+  .lite.on .sw{background:color-mix(in srgb,var(--on) 22%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
+  .lite.on .sw .knob{left:22px; background:var(--on)}
+  .literow2 .picker{width:26px;height:26px;flex:0 0 auto}
   /* toast */
   #toast{position:fixed; left:50%; bottom:78px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--surface);
@@ -313,7 +353,7 @@ function fmtTime(d){ return d.toLocaleTimeString([], {hour:"numeric",minute:"2-d
 
 function render(){
   if(!DEVICES.length){ app.innerHTML='<div class="empty">No lights found.</div>'; return; }
-  // bucket by group name (d.room), then order: defined groups first, Ungrouped last
+  // bucket by group; order: defined groups first, Ungrouped last
   const byGroup = {};
   DEVICES.forEach(d => (byGroup[d.room||"Ungrouped"] ||= []).push(d));
   const ordered = [
@@ -321,61 +361,52 @@ function render(){
     ...Object.keys(byGroup).filter(n=>n!=="Ungrouped" && !GROUPS.some(g=>g.name===n)),
   ];
   if(byGroup["Ungrouped"]) ordered.push("Ungrouped");
+
+  const totalOn = DEVICES.filter(d=>d._state.on && d.online).length;
+  const totalOnline = DEVICES.filter(d=>d.online).length;
   const seen = new Set();
-  let html = "";
+  let tiles = "";
   for(const name of ordered){
     if(seen.has(name)) continue; seen.add(name);
     const list = byGroup[name]; if(!list) continue;
     const online = list.filter(d=>d.online);
     const onCount = online.filter(d=>d._state.on).length;
+    const anyOn = onCount>0;
     const avg = online.length ? Math.round(online.reduce((s,d)=>s+d._state.brightness,0)/online.length) : 60;
-    const sw = PRESETS.map(([hex,r,g,b])=>
+    const wide = list.length>=3;
+    const presets = PRESETS.map(([hex,r,g,b])=>
       `<span class="swatch" style="background:${hex}" data-grpcolor="${Govee.rgbToInt(r,g,b)}" data-grp="${name}"></span>`).join("");
-    html += `<div class="grpttl">${name}
-        <span class="gcount">${onCount}/${list.length} on</span>
-        <span class="gtoggle">
-          <button class="mini" data-room="${name}" data-roomact="on">On</button>
-          <button class="mini" data-room="${name}" data-roomact="off">Off</button>
-        </span></div>
-        <div class="gctrl">
-          <input type="range" min="1" max="100" value="${avg}" data-grpbri="${name}" style="--p:${avg}%">
-          <span class="gswatches">${sw}<input type="color" class="swatch picker" data-grppick="${name}" value="#ffffff" title="Custom color for this group"></span>
+    tiles += `<div class="tile ${wide?'wide':''}">
+        <div class="thead">
+          <span class="tname">${name} <span class="tcount">${onCount}/${list.length} on</span></span>
+          <div class="gsw ${anyOn?'on':''}" data-grptoggle="${name}" role="switch" aria-checked="${anyOn}"><span class="gk"></span></div>
         </div>
-        <div class="grid">${list.map(cardHTML).join("")}</div>`;
+        <div class="tctrl">
+          <input type="range" min="1" max="100" value="${avg}" data-grpbri="${name}" style="--p:${avg}%">
+          <span class="tswatch">${presets}<input type="color" class="swatch picker" data-grppick="${name}" value="#ffffff" title="Custom color for ${name}"></span>
+        </div>
+        <div class="lites">${list.map(liteHTML).join("")}</div>
+      </div>`;
   }
-  app.innerHTML = html;
+  app.innerHTML =
+    `<div class="summary">${totalOn} of ${totalOnline} lights on · ${ordered.length} ${ordered.length===1?'group':'groups'}</div>`
+    + `<div class="bento">${tiles}</div>`;
 }
 
-function cardHTML(d){
+// compact light "chip": colored dot + name + toggle, with brightness + custom color
+function liteHTML(d){
   const c = cssRgb(d._state.color);
   const on = d._state.on && d.online;
   const bri = d._state.brightness;
-  const presets = PRESETS.map(([hex,r,g,b])=>{
-    const sel = (Govee.rgbToInt(r,g,b)===d._state.color) ? " sel":"";
-    return `<span class="swatch${sel}" style="background:${hex}" data-color="${Govee.rgbToInt(r,g,b)}" data-dev="${d.device}"></span>`;
-  }).join("");
-  return `
-  <div class="card ${on?'on':''} ${d.online?'':'offline'}" style="--cardc:${c}" data-card="${d.device}">
-    <div class="glow"></div>
-    <div class="crow">
-      <span class="dot ${d.online?'online':'off2'}"></span>
-      <div>
-        <div class="cname">${d.deviceName}</div>
-        <div class="csku">${d.online?d.sku:'OFFLINE · '+d.sku}</div>
-      </div>
-      <div class="pwr">
-        <div class="sw" data-pwr="${d.device}" role="switch" aria-checked="${on}"><span class="knob"></span></div>
-      </div>
+  return `<div class="lite ${on?'on':''} ${d.online?'':'offline'}" style="--litec:${c}">
+    <div class="literow">
+      <span class="litedot"></span>
+      <span class="litename">${d.deviceName}</span>
+      <div class="sw" data-pwr="${d.device}" role="switch" aria-checked="${on}"><span class="knob"></span></div>
     </div>
-    <div class="ctl">
-      <div class="lbl"><span>Brightness</span><span>${bri}%</span></div>
-      <input type="range" min="1" max="100" value="${bri}" data-bri="${d.device}"
-             style="--p:${bri}%" ${d.online?'':'disabled'}>
-    </div>
-    <div class="colors">
-      ${presets}
-      <input type="color" class="swatch picker" value="${rgbHex(d._state.color)}"
-             data-pick="${d.device}" title="Pick a custom color" ${d.online?'':'disabled'}>
+    <div class="literow2">
+      <input type="range" min="1" max="100" value="${bri}" data-bri="${d.device}" style="--p:${bri}%" ${d.online?'':'disabled'}>
+      <input type="color" class="swatch picker" value="${rgbHex(d._state.color)}" data-pick="${d.device}" title="Color" ${d.online?'':'disabled'}>
     </div>
   </div>`;
 }
@@ -398,11 +429,10 @@ app.addEventListener("click", e=>{
   if(sw){ const d = byId(sw.dataset.dev); const v = +sw.dataset.color;
     return safe(()=>Govee.setColor(d.device,v), ()=>{ d._state.color=v; render(); });
   }
-  const room = e.target.closest("[data-roomact]");
-  if(room){ const want = room.dataset.roomact==="on"; const name=room.dataset.room;
-    DEVICES.filter(d=>(d.room||"Ungrouped")===name && d.online).forEach(d=>{
-      d._state.on=want; Govee.setPower(d.device,want).catch(()=>{});
-    });
+  const gtog = e.target.closest("[data-grptoggle]");
+  if(gtog){ const name=gtog.dataset.grptoggle; const online=DEVICES.filter(d=>d.room===name && d.online);
+    const want = !online.some(d=>d._state.on);   // any on -> turn all off, else all on
+    online.forEach(d=>{ d._state.on=want; Govee.setPower(d.device,want).catch(()=>{}); });
     render(); toast(`${name}: all ${want?'on':'off'}`); return;
   }
   const gcol = e.target.closest("[data-grpcolor]");
@@ -415,7 +445,7 @@ app.addEventListener("input", e=>{
   const bri = e.target.closest("[data-bri]");
   if(bri){ const d=byId(bri.dataset.bri); const v=+bri.value;
     d._state.brightness=v; bri.style.setProperty("--p",v+"%");
-    bri.closest(".ctl").querySelector(".lbl span:last-child").textContent=v+"%";
+    const lbl=bri.closest(".ctl")?.querySelector(".lbl span:last-child"); if(lbl) lbl.textContent=v+"%";
     clearTimeout(d._briT); d._briT=setTimeout(()=>{
       safe(()=>Govee.setBright(d.device,v));
     },220); // debounce while dragging

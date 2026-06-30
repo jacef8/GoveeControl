@@ -86,8 +86,9 @@
 
     <div class="sttl">Automations</div>
     <div id="gauto"></div>
-    <div class="row" style="margin-top:10px; flex-wrap:nowrap">
-      <input id="gschin" placeholder="all lights off at 11pm" />
+    <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap">
+      <input id="gschin" placeholder="off at 11pm" style="flex:1; min-width:150px" />
+      <select id="gschgrp" title="Which lights" style="background:#0e1424;border:var(--bw) solid var(--line);border-radius:12px;color:var(--ink);font:14px system-ui;padding:8px 10px"></select>
       <button id="gschadd" class="btn">Add</button>
     </div>
 
@@ -296,17 +297,49 @@ async function renderBuiltin(){
     <div style="font-size:11px;color:var(--dim);margin-top:2px">built-in · smooth</div></div>`).join("");
 }
 
-/* ---------- automations ---------- */
-let AUTO=[
-  {label:"All lights off",when:"11:00 PM daily",on:true},
-  {label:"Backyard on",when:"at sunset",on:true},
-  {label:"Kitchen to 40%",when:"6:30 AM weekdays",on:false}
-];
-function renderAuto(){
-  $("#gauto").innerHTML = AUTO.map((s,i)=>`<div class="arow">
-    <div style="flex:1"><div style="font-weight:800;font-size:15px">${s.label}</div>
-      <div style="font-size:12px;color:var(--dim);margin-top:2px">${s.when}</div></div>
-    <div class="sw ${s.on?'on':''}" data-tog="${i}"><span class="k"></span></div></div>`).join("");
+/* ---------- automations (persisted on the server, group-targeted) ----------
+   In mock mode these stay local; live, they POST to /automations where the
+   Railway cron actually fires them (even when the app is closed). */
+let AUTO=[];
+let SGROUPS=[];   // groups available for the timer target picker
+
+async function autoList(){
+  if(CONFIG.USE_MOCK) return AUTO;
+  try{ const r=await fetch(CONFIG.PROXY_BASE+"/automations",{headers:{"X-Passcode":CONFIG.PASSCODE}}); return (await r.json()).data||[]; }
+  catch{ return []; }
+}
+async function autoAdd(a){
+  if(CONFIG.USE_MOCK){ a.id="a"+Date.now(); AUTO.unshift(a); return a; }
+  const r=await fetch(CONFIG.PROXY_BASE+"/automations",{method:"POST",headers:phdr(),body:JSON.stringify(a)});
+  return (await r.json()).data;
+}
+async function autoPatch(id,patch){
+  if(CONFIG.USE_MOCK){ const a=AUTO.find(x=>x.id===id); if(a) Object.assign(a,patch); return; }
+  await fetch(CONFIG.PROXY_BASE+"/automations/"+id,{method:"PATCH",headers:phdr(),body:JSON.stringify(patch)});
+}
+async function autoDel(id){
+  AUTO=AUTO.filter(x=>x.id!==id);
+  if(!CONFIG.USE_MOCK) await fetch(CONFIG.PROXY_BASE+"/automations/"+id,{method:"DELETE",headers:{"X-Passcode":CONFIG.PASSCODE}});
+}
+async function loadSGroups(){
+  if(CONFIG.USE_MOCK){ try{ SGROUPS=JSON.parse(localStorage.getItem("gv_groups")||"[]"); }catch{ SGROUPS=[]; } }
+  else { try{ const r=await fetch(CONFIG.PROXY_BASE+"/groups",{headers:{"X-Passcode":CONFIG.PASSCODE}}); SGROUPS=(await r.json()).data||[]; }catch{ SGROUPS=[]; } }
+  const sel=$("#gschgrp");
+  if(sel) sel.innerHTML='<option value="">All lights</option>'+SGROUPS.map(g=>`<option value="${g.id}">${g.name}</option>`).join("");
+}
+async function renderAuto(){
+  AUTO = await autoList();
+  const el=$("#gauto");
+  if(!AUTO.length){ el.innerHTML='<div style="color:#6f7ea3;font-size:13px;padding:4px 2px">No automations yet. Pick lights + a time below — e.g. "off at 11pm".</div>'; return; }
+  el.innerHTML = AUTO.map(s=>{
+    const en = s.enabled!==false && s.on!==false;
+    const tgt = s.action?.groupId ? (SGROUPS.find(g=>g.id===s.action.groupId)?.name || "group") : "all lights";
+    return `<div class="arow">
+      <div style="flex:1"><div style="font-weight:800;font-size:15px">${s.label||"Automation"}</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px">${s.when||s.cron||""} · ${tgt}</div></div>
+      <div class="sw ${en?'on':''}" data-tog="${s.id}"><span class="k"></span></div>
+      <button class="ex" data-audel="${s.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:8px">✕</button></div>`;
+  }).join("");
 }
 async function parseSchedule(text){
   if(!CONFIG.USE_MOCK){ const r=await fetch(CONFIG.PROXY_BASE+"/ai/schedule",{method:"POST",
@@ -399,8 +432,14 @@ $("#ggen").onclick=async()=>{ const p=$("#gp").value||"multicolored moving party
   msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`); };
 $("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
 $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;
-  AUTO.unshift(await parseSchedule(v)); $("#gschin").value=""; renderAuto();
-  msg("Automation added — Claude parses the time + action, Railway cron fires it"); };
+  msg("Parsing time…");
+  const sched=await parseSchedule(v);                 // {label,when,cron,action}
+  const gid=$("#gschgrp")?.value||"";
+  if(gid){ sched.action=sched.action||{kind:"allOff"}; sched.action.groupId=gid; }
+  sched.enabled=true;
+  await autoAdd(sched); $("#gschin").value=""; await renderAuto();
+  const where=gid?` for ${SGROUPS.find(g=>g.id===gid)?.name||"group"}`:" for all lights";
+  msg(`Automation saved${where} — Railway cron will fire it`); };
 $("#gtrigadd").onclick=async()=>{
   const ev=$("#gtrigev").value.trim().toLowerCase().replace(/\s+/g,"_"); if(!ev)return;
   const sel=$("#gtrigact").value;
@@ -417,10 +456,13 @@ document.addEventListener("click", async e=>{
   const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; await activateBuiltin(s); msg(`Activated built-in "${s.name}"`); return; }
   const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
   const trd=e.target.closest("[data-trdel]"); if(trd){ const id=trd.dataset.trdel; const ev=(TRIGGERS.find(x=>x.id===id)||{}).event; await trigDel(id); renderTriggers(); msg(`Removed trigger "${ev}"`); return; }
-  const tg=e.target.closest("[data-tog]"); if(tg){ const i=+tg.dataset.tog; AUTO[i].on=!AUTO[i].on; renderAuto(); msg(AUTO[i].label+(AUTO[i].on?" enabled":" paused")); return; }
+  const tg=e.target.closest("[data-tog]"); if(tg){ const id=tg.dataset.tog; const a=AUTO.find(x=>x.id===id); if(!a)return;
+    const en=!(a.enabled!==false && a.on!==false); a.enabled=en; await autoPatch(id,{enabled:en}); await renderAuto();
+    msg((a.label||"Automation")+(en?" enabled":" paused")); return; }
+  const aud=e.target.closest("[data-audel]"); if(aud){ const id=aud.dataset.audel; await autoDel(id); await renderAuto(); msg("Automation removed"); return; }
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
-renderLibFilter(); renderLibrary(); renderAuto(); renderTeam(); renderTriggers();
+renderLibFilter(); renderLibrary(); loadSGroups().then(renderAuto); renderTeam(); renderTriggers();
 (async()=>{
   await loadDevices(); renderBuiltin();
   if(!CONFIG.USE_MOCK){ TRIGGERS = await trigGet(); renderTriggers(); }

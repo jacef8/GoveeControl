@@ -306,11 +306,17 @@ function saveStore() { writeFileSync(STORE_PATH, JSON.stringify(store, null, 2))
 
 async function runAction(action) {
   if (!Object.keys(deviceMap).length) await listDevices().catch(() => {});
-  const ids = Object.keys(deviceMap);
+  // Target a group's devices if action.groupId is set, else every device.
+  let ids = Object.keys(deviceMap);
+  if (action.groupId) {
+    const g = groups.find((x) => x.id === action.groupId);
+    ids = g ? g.devices.filter((id) => deviceMap[id]) : ids;
+  }
   if (action.kind === "allOff") return Promise.allSettled(ids.map((id) => setPower(id, false)));
   if (action.kind === "allOn") {
     await Promise.allSettled(ids.map((id) => setPower(id, true)));
     if (action.brightness != null) await Promise.allSettled(ids.map((id) => setBright(id, action.brightness)));
+    if (action.color != null)      await Promise.allSettled(ids.map((id) => setColor(id, action.color)));
     return;
   }
   if (action.kind === "scene" && action.scene) {
@@ -367,6 +373,33 @@ app.delete("/automations/:id", gate, (req, res) => {
   clearJob(req.params.id);
   store = store.filter((x) => x.id !== req.params.id); saveStore();
   res.json({ ok: true });
+});
+
+/* ============================================================
+   GROUPS  (named device groups for bulk control + group timers)
+   record = { id, name, devices:[deviceId,...] }
+   Persisted under DATA_DIR so they sync across every device.
+   ============================================================ */
+const GROUP_PATH = join(DATA_DIR, "groups.json");
+let groups = [];
+function loadGroups() {
+  try { groups = existsSync(GROUP_PATH) ? JSON.parse(readFileSync(GROUP_PATH, "utf8")) : []; }
+  catch { groups = []; }
+}
+function saveGroups() { writeFileSync(GROUP_PATH, JSON.stringify(groups, null, 2)); }
+
+app.get("/groups", gate, (_req, res) => res.json({ data: groups }));
+app.post("/groups", gate, (req, res) => {
+  const g = { id: randomUUID(), name: req.body.name || "Group", devices: req.body.devices || [] };
+  groups.push(g); saveGroups(); res.json({ data: g });
+});
+app.patch("/groups/:id", gate, (req, res) => {
+  const g = groups.find((x) => x.id === req.params.id);
+  if (!g) return res.status(404).json({ error: "not found" });
+  Object.assign(g, req.body); saveGroups(); res.json({ data: g });
+});
+app.delete("/groups/:id", gate, (req, res) => {
+  groups = groups.filter((x) => x.id !== req.params.id); saveGroups(); res.json({ ok: true });
 });
 
 /* ============================================================
@@ -443,5 +476,6 @@ app.delete("/triggers/:id", gate, (req, res) => {
 /* ---------- boot ---------- */
 loadStore();
 loadTriggers();
+loadGroups();
 listDevices().then(rescheduleAll).catch(() => rescheduleAll());
 app.listen(PORT, () => console.log(`Govee proxy on :${PORT}`));

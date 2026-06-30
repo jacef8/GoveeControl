@@ -44,6 +44,12 @@
     color:#aeb6cc; font-weight:600; font-size:12px; padding:5px 12px; border-radius:11px; cursor:pointer}
   .mini:active{transform:scale(.95)}
   .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px}
+  /* ---------- per-group global controls ---------- */
+  .gctrl{display:flex; align-items:center; gap:14px; margin:-4px 4px 14px; flex-wrap:wrap}
+  .gctrl input[type=range]{flex:1; min-width:120px; max-width:260px; height:6px;
+    background:linear-gradient(90deg,#6e8bff var(--p,60%),rgba(255,255,255,.1) var(--p,60%))}
+  .gctrl .gswatches{display:flex; gap:9px}
+  .gctrl .swatch{width:23px;height:23px}
   /* ---------- light card ---------- */
   .card{position:relative; border:1px solid var(--stroke); border-radius:var(--radius);
     background:var(--glass); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
@@ -113,6 +119,7 @@
 <body>
   <header>
     <h1><span class="logo"></span> Govee Control</h1>
+    <button class="hbtn" data-act="groups">Groups</button>
     <a class="hbtn" href="scenes.html" style="text-decoration:none">Scenes</a>
     <button class="hbtn on" data-act="allon">All On</button>
     <button class="hbtn off" data-act="alloff">All Off</button>
@@ -229,6 +236,32 @@ const Govee = (() => {
 })();
 
 /* ============================================================
+   GROUPS API — server-synced (so groups follow you to every device).
+   Mock mode keeps them in localStorage.
+   ============================================================ */
+const GroupsAPI = (() => {
+  const M = CONFIG.USE_MOCK, KEY = "gv_groups";
+  const lget = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const lset = v => localStorage.setItem(KEY, JSON.stringify(v));
+  const call = async (path, method, body) => {
+    const r = await fetch(CONFIG.PROXY_BASE + path, {
+      method, headers: { "Content-Type": "application/json", "X-Passcode": CONFIG.PASSCODE },
+      body: body ? JSON.stringify(body) : undefined });
+    if (!r.ok) throw new Error("groups " + r.status);
+    return r.json();
+  };
+  return {
+    list:   async () => M ? lget() : ((await call("/groups", "GET")).data || []),
+    add:    async name => { if (M) { const a = lget(); const g = { id: "g" + Date.now(), name, devices: [] }; a.push(g); lset(a); return g; }
+                            return (await call("/groups", "POST", { name, devices: [] })).data; },
+    update: async (id, patch) => { if (M) { const a = lget(); const g = a.find(x => x.id === id); if (g) Object.assign(g, patch); lset(a); return g; }
+                                   return (await call("/groups/" + id, "PATCH", patch)).data; },
+    remove: async id => { if (M) { lset(lget().filter(x => x.id !== id)); return; } await call("/groups/" + id, "DELETE"); },
+  };
+})();
+let GROUPS = [];
+
+/* ============================================================
    UI
    ============================================================ */
 const PRESETS = [ // name + rgb
@@ -248,20 +281,35 @@ function fmtTime(d){ return d.toLocaleTimeString([], {hour:"numeric",minute:"2-d
 
 function render(){
   if(!DEVICES.length){ app.innerHTML='<div class="empty">No lights found.</div>'; return; }
-  // group by room
-  const rooms = {};
-  DEVICES.forEach(d => (rooms[d.room||"Lights"] ||= []).push(d));
+  // bucket by group name (d.room), then order: defined groups first, Ungrouped last
+  const byGroup = {};
+  DEVICES.forEach(d => (byGroup[d.room||"Ungrouped"] ||= []).push(d));
+  const ordered = [
+    ...GROUPS.map(g=>g.name).filter(n=>byGroup[n]),
+    ...Object.keys(byGroup).filter(n=>n!=="Ungrouped" && !GROUPS.some(g=>g.name===n)),
+  ];
+  if(byGroup["Ungrouped"]) ordered.push("Ungrouped");
+  const seen = new Set();
   let html = "";
-  for(const [room, list] of Object.entries(rooms)){
-    const onCount = list.filter(d=>d._state.on && d.online).length;
-    html += `<div class="grpttl">${room}
+  for(const name of ordered){
+    if(seen.has(name)) continue; seen.add(name);
+    const list = byGroup[name]; if(!list) continue;
+    const online = list.filter(d=>d.online);
+    const onCount = online.filter(d=>d._state.on).length;
+    const avg = online.length ? Math.round(online.reduce((s,d)=>s+d._state.brightness,0)/online.length) : 60;
+    const sw = PRESETS.map(([hex,r,g,b])=>
+      `<span class="swatch" style="background:${hex}" data-grpcolor="${Govee.rgbToInt(r,g,b)}" data-grp="${name}"></span>`).join("");
+    html += `<div class="grpttl">${name}
         <span class="gcount">${onCount}/${list.length} on</span>
         <span class="gtoggle">
-          <button class="mini" data-room="${room}" data-roomact="on">On</button>
-          <button class="mini" data-room="${room}" data-roomact="off">Off</button>
-        </span></div><div class="grid">`;
-    html += list.map(cardHTML).join("");
-    html += `</div>`;
+          <button class="mini" data-room="${name}" data-roomact="on">On</button>
+          <button class="mini" data-room="${name}" data-roomact="off">Off</button>
+        </span></div>
+        <div class="gctrl">
+          <input type="range" min="1" max="100" value="${avg}" data-grpbri="${name}" style="--p:${avg}%">
+          <span class="gswatches">${sw}</span>
+        </div>
+        <div class="grid">${list.map(cardHTML).join("")}</div>`;
   }
   app.innerHTML = html;
 }
@@ -320,10 +368,15 @@ app.addEventListener("click", e=>{
   }
   const room = e.target.closest("[data-roomact]");
   if(room){ const want = room.dataset.roomact==="on"; const name=room.dataset.room;
-    DEVICES.filter(d=>(d.room||"Lights")===name && d.online).forEach(d=>{
+    DEVICES.filter(d=>(d.room||"Ungrouped")===name && d.online).forEach(d=>{
       d._state.on=want; Govee.setPower(d.device,want).catch(()=>{});
     });
     render(); toast(`${name}: all ${want?'on':'off'}`); return;
+  }
+  const gcol = e.target.closest("[data-grpcolor]");
+  if(gcol){ const v=+gcol.dataset.grpcolor; const name=gcol.dataset.grp;
+    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>{ d._state.color=v; Govee.setColor(d.device,v).catch(()=>{}); });
+    render(); toast(`${name}: color set`); return;
   }
 });
 app.addEventListener("input", e=>{
@@ -341,11 +394,19 @@ app.addEventListener("input", e=>{
       safe(()=>Govee.setColor(d.device,v), ()=>render());
     },220);
   }
+  const gbri = e.target.closest("[data-grpbri]");
+  if(gbri){ const v=+gbri.value; const name=gbri.dataset.grpbri; gbri.style.setProperty("--p",v+"%");
+    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>d._state.brightness=v);
+    clearTimeout(gbri._t); gbri._t=setTimeout(()=>{
+      DEVICES.filter(d=>d.room===name && d.online).forEach(d=>Govee.setBright(d.device,v).catch(()=>{}));
+    },250); // debounce while dragging the group slider
+  }
 });
 document.querySelector("header").addEventListener("click", e=>{
   const b=e.target.closest("[data-act]"); if(!b) return;
   const a=b.dataset.act;
   if(a==="refresh") return load();
+  if(a==="groups") return openGroups();
   if(a==="allon"||a==="alloff"){ const want=a==="allon";
     DEVICES.filter(d=>d.online).forEach(d=>{ d._state.on=want; Govee.setPower(d.device,want).catch(()=>{}); });
     render(); toast(`All lights ${want?'on':'off'}`);
@@ -365,9 +426,12 @@ async function load(){
           d.online = s?.online ?? true;
           d._state = { on:!!s.on, brightness:s.brightness??100, color:s.color??Govee.rgbToInt(255,255,255) };
         }catch{ d.online=false; d._state={on:false,brightness:100,color:Govee.rgbToInt(255,255,255)}; }
-        d.room = d.room || "Lights";
       }));
     }
+    // assign each device to its group (server-synced); ungrouped fall to "Ungrouped"
+    try{ GROUPS = await GroupsAPI.list(); }catch{ GROUPS = []; }
+    const gmap = {}; GROUPS.forEach(g=>(g.devices||[]).forEach(id=>gmap[id]=g.name));
+    DEVICES.forEach(d=>{ d.room = gmap[d.device] || d.room || "Ungrouped"; });
     render();
     const n = DEVICES.length, online = DEVICES.filter(d=>d.online).length;
     $("#status").textContent = `${online}/${n} online`;
@@ -380,6 +444,74 @@ async function load(){
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
 load();
 setInterval(load, CONFIG.POLL_MS);
+
+/* ============================================================
+   GROUPS MANAGER  — create groups, assign lights (exclusive membership).
+   Changes save to the proxy and re-render the dashboard.
+   ============================================================ */
+function openGroups(){
+  let ov = document.getElementById("grpOverlay");
+  if(!ov){
+    ov = document.createElement("div"); ov.id = "grpOverlay";
+    ov.style.cssText = "position:fixed;inset:0;z-index:150;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:18px";
+    ov.innerHTML = '<div id="grpCard" style="width:min(460px,94vw);max-height:84vh;overflow:auto;box-sizing:border-box;background:rgba(22,26,48,.95);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:20px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.style.display="none"; });
+    // delegated actions inside the modal
+    ov.addEventListener("change", async e=>{
+      const chk = e.target.closest("[data-gchk]");
+      if(chk){ const gid=chk.dataset.gchk, dev=chk.dataset.dev, g=GROUPS.find(x=>x.id===gid); if(!g) return;
+        if(chk.checked){
+          for(const og of GROUPS){ if(og.id!==gid && (og.devices||[]).includes(dev)){
+            const nd=og.devices.filter(x=>x!==dev); await GroupsAPI.update(og.id,{devices:nd}); og.devices=nd; } }
+          if(!(g.devices||[]).includes(dev)){ const nd=(g.devices||[]).concat(dev); await GroupsAPI.update(gid,{devices:nd}); g.devices=nd; }
+        } else { const nd=(g.devices||[]).filter(x=>x!==dev); await GroupsAPI.update(gid,{devices:nd}); g.devices=nd; }
+        renderGroupsModal(); load(); return;
+      }
+      const rn = e.target.closest("[data-grename]");
+      if(rn){ await GroupsAPI.update(rn.dataset.grename,{name:rn.value.trim()||"Group"}); GROUPS=await GroupsAPI.list(); load(); return; }
+    });
+    ov.addEventListener("click", async e=>{
+      const del = e.target.closest("[data-grdel]");
+      if(del){ await GroupsAPI.remove(del.dataset.grdel); GROUPS=await GroupsAPI.list(); renderGroupsModal(); load(); return; }
+    });
+  }
+  ov.style.display = "flex";
+  renderGroupsModal();
+}
+async function renderGroupsModal(){
+  const card = document.getElementById("grpCard");
+  card.innerHTML =
+    '<div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:19px;font-weight:600;flex:1">Manage groups</h2><button id="grpClose" style="border:0;background:transparent;color:#8a93b0;font-size:20px;cursor:pointer">✕</button></div>'
+    +'<p style="margin:0 0 14px;color:#aab;font-size:12.5px;line-height:1.5">Organize your lights into rooms/zones. Each group gets its own On/Off, brightness, and color — and can be targeted by timers on the Scenes page.</p>'
+    +'<div style="display:flex;gap:8px;margin-bottom:16px"><input id="grpNew" placeholder="New group name (e.g. Living Room)" style="flex:1;box-sizing:border-box;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px"><button id="grpAdd" style="padding:10px 16px;border-radius:11px;border:0;background:#4f7cff;color:#fff;font-weight:600;cursor:pointer">Add</button></div>'
+    +'<div id="grpList">Loading…</div>';
+  card.querySelector("#grpClose").onclick = ()=> document.getElementById("grpOverlay").style.display="none";
+  card.querySelector("#grpAdd").onclick = async ()=>{
+    const name = card.querySelector("#grpNew").value.trim(); if(!name) return;
+    await GroupsAPI.add(name); GROUPS = await GroupsAPI.list(); renderGroupsModal();
+  };
+  try{ GROUPS = await GroupsAPI.list(); }catch{ GROUPS = []; }
+  const list = card.querySelector("#grpList");
+  if(!GROUPS.length){
+    list.innerHTML = '<div style="color:#8a93b0;font-size:13px;text-align:center;padding:18px">No groups yet. Add one above, then check the lights that belong to it.</div>';
+    return;
+  }
+  list.innerHTML = GROUPS.map(g=>{
+    const checks = DEVICES.map(d=>{
+      const inG = (g.devices||[]).includes(d.device);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13.5px;cursor:pointer"><input type="checkbox" ${inG?'checked':''} data-gchk="${g.id}" data-dev="${d.device}" style="width:16px;height:16px">${d.deviceName} <span style="color:#6f7ea3;font-size:11px">${d.sku||''}</span></label>`;
+    }).join("");
+    const nm = (g.name||"").replace(/"/g,'&quot;');
+    return `<div style="border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input value="${nm}" data-grename="${g.id}" style="flex:1;box-sizing:border-box;padding:8px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font-weight:600;font-size:14px">
+        <button data-grdel="${g.id}" style="border:1px solid #6e2f2f;background:rgba(255,80,80,.12);color:#ff8a8a;border-radius:9px;padding:8px 12px;font-weight:600;cursor:pointer">Delete</button>
+      </div>
+      <div style="max-height:190px;overflow:auto">${checks || '<span style="color:#8a93b0;font-size:13px">No lights loaded — open this on the live dashboard.</span>'}</div>
+    </div>`;
+  }).join("");
+}
 
 /* ============================================================
    SETTINGS  — proxy URL + passcode, stored in localStorage (gv_cfg).

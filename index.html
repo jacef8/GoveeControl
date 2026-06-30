@@ -175,6 +175,32 @@
   .lite.on .sw{background:color-mix(in srgb,var(--on) 22%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
   .lite.on .sw .knob{left:22px; background:var(--on)}
   .literow2 .picker{width:26px;height:26px;flex:0 0 auto}
+  .litemain{display:flex; align-items:center; gap:10px; flex:1; min-width:0; background:none; border:0; padding:0; cursor:pointer; text-align:left; color:inherit; font:inherit}
+  .litemore{margin-left:auto; color:var(--ink-faint); font-size:17px; padding-right:2px; line-height:1}
+  /* ---------- light detail sheet ---------- */
+  .sw.lon{background:color-mix(in srgb,var(--on) 22%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
+  .sw.lon .knob{left:27px; background:var(--on)}
+  .ld-head{display:flex; align-items:center; gap:11px; margin-bottom:4px}
+  .ld-name{font-size:17px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .ld-sub{font-size:12.5px; color:var(--ink-faint)}
+  .ld-x{border:0; background:transparent; color:var(--ink-faint); font-size:18px; cursor:pointer; padding:4px 2px}
+  .ld-sec{margin-top:20px}
+  .ld-lbl{display:flex; justify-content:space-between; font-size:13px; color:var(--ink-2); font-weight:500; margin-bottom:11px}
+  .ld-lbl span:last-child{color:var(--ink); font-weight:600}
+  .ld-sws{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
+  .ld-sw{width:32px;height:32px;border-radius:5px;border:2px solid var(--line-strong);cursor:pointer;padding:0; transition:transform .12s}
+  .ld-sw:active{transform:scale(.9)}
+  .ld-pick{width:32px;height:32px}
+  .ld-whites{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+  .ld-white{flex:1; min-width:62px; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink);
+    font:600 13px 'Inter',system-ui; padding:9px 6px; border-radius:5px; cursor:pointer}
+  .ld-white:active{transform:scale(.97)}
+  input[type=range].huebar, input[type=range].tempbar{-webkit-appearance:none; appearance:none; width:100%; height:16px; border-radius:4px; cursor:pointer}
+  input[type=range].huebar{background:linear-gradient(90deg,#ff0000,#ff8000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000)}
+  input[type=range].tempbar{background:linear-gradient(90deg,#ff8a1e,#ffd9a0,#ffffff,#cfe0ff,#9bbcff)}
+  input[type=range].huebar::-webkit-slider-thumb, input[type=range].tempbar::-webkit-slider-thumb{-webkit-appearance:none; width:24px;height:24px;border-radius:4px;
+    background:#fff; border:2px solid rgba(0,0,0,.3); box-shadow:0 1px 5px rgba(0,0,0,.45)}
+  input[type=range].huebar::-moz-range-thumb, input[type=range].tempbar::-moz-range-thumb{width:22px;height:22px;border-radius:4px;background:#fff;border:2px solid rgba(0,0,0,.3)}
   /* toast */
   #toast{position:fixed; left:50%; bottom:78px; transform:translateX(-50%) translateY(20px);
     background:var(--ink); color:var(--surface);
@@ -277,6 +303,7 @@ const Govee = (() => {
     if(instance==="powerSwitch") d._state.on = !!value;
     if(instance==="brightness")  d._state.brightness = value;
     if(instance==="colorRgb")    d._state.color = value;
+    if(instance==="colorTemperatureK"){ d._state.colorTemp = value; d._state.color = kelvinToRgb(value); }
     return { ok:true };
   }
 
@@ -305,6 +332,7 @@ const Govee = (() => {
     setPower:(id,on)   => (M?mockControl:liveControl)(id,"devices.capabilities.on_off","powerSwitch",on?1:0),
     setBright:(id,v)   => (M?mockControl:liveControl)(id,"devices.capabilities.range","brightness",v),
     setColor:(id,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorRgb",rgbInt),
+    setColorTemp:(id,k) =>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorTemperatureK",k),
   };
 })();
 
@@ -401,8 +429,11 @@ function liteHTML(d){
   const bri = d._state.brightness;
   return `<div class="lite ${on?'on':''} ${d.online?'':'offline'}" style="--litec:${c}">
     <div class="literow">
-      <span class="litedot"></span>
-      <span class="litename">${d.deviceName}</span>
+      <button class="litemain" data-litedetail="${d.device}" title="More controls">
+        <span class="litedot"></span>
+        <span class="litename">${d.deviceName}</span>
+        <span class="litemore">⋯</span>
+      </button>
       <div class="sw" data-pwr="${d.device}" role="switch" aria-checked="${on}"><span class="knob"></span></div>
     </div>
     <div class="literow2">
@@ -414,6 +445,22 @@ function liteHTML(d){
 function rgbHex(n){ const {r,g,b}=Govee.intToRgb(n);
   return "#"+[r,g,b].map(x=>x.toString(16).padStart(2,"0")).join(""); }
 function hexInt(hex){ const n=parseInt(hex.slice(1),16); return n; }
+// full-saturation color from a hue angle (0-360)
+function hueToRgb(h){ h=((h%360)+360)%360; const x=1-Math.abs((h/60)%2-1); let r,g,b;
+  if(h<60){r=1;g=x;b=0;} else if(h<120){r=x;g=1;b=0;} else if(h<180){r=0;g=1;b=x;}
+  else if(h<240){r=0;g=x;b=1;} else if(h<300){r=x;g=0;b=1;} else {r=1;g=0;b=x;}
+  return (Math.round(r*255)<<16)|(Math.round(g*255)<<8)|Math.round(b*255); }
+function rgbToHue(n){ const {r,g,b}=Govee.intToRgb(n); const R=r/255,G=g/255,B=b/255;
+  const mx=Math.max(R,G,B),mn=Math.min(R,G,B),d=mx-mn; let h=0;
+  if(d===0)h=0; else if(mx===R)h=((G-B)/d)%6; else if(mx===G)h=(B-R)/d+2; else h=(R-G)/d+4;
+  h=Math.round(h*60); return h<0?h+360:h; }
+// approximate RGB for a white color temperature in Kelvin (~2000-9000)
+function kelvinToRgb(k){ const t=k/100; let r,g,b;
+  r = t<=66 ? 255 : 329.7*Math.pow(t-60,-0.1332);
+  g = t<=66 ? 99.47*Math.log(t)-161.12 : 288.12*Math.pow(t-60,-0.0755);
+  b = t>=66 ? 255 : (t<=19 ? 0 : 138.52*Math.log(t-10)-305.04);
+  const cl=x=>Math.max(0,Math.min(255,Math.round(x||0)));
+  return (cl(r)<<16)|(cl(g)<<8)|cl(b); }
 
 /* ---------- interactions (event delegation) ---------- */
 async function safe(fn, optimistic){
@@ -426,6 +473,8 @@ app.addEventListener("click", e=>{
     const next = !d._state.on;
     return safe(()=>Govee.setPower(d.device,next), ()=>{ d._state.on=next; render(); });
   }
+  const ld = e.target.closest("[data-litedetail]");
+  if(ld){ return openLight(ld.dataset.litedetail); }
   const sw = e.target.closest("[data-color]");
   if(sw){ const d = byId(sw.dataset.dev); const v = +sw.dataset.color;
     return safe(()=>Govee.setColor(d.device,v), ()=>{ d._state.color=v; render(); });
@@ -514,6 +563,61 @@ async function load(){
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
 load();
 setInterval(load, CONFIG.POLL_MS);
+
+/* ============================================================
+   LIGHT DETAIL  — full per-light controls (Govee-app style):
+   power, brightness, hue spectrum, color presets, custom color,
+   and white color temperature.
+   ============================================================ */
+const WHITES = [["Warm",2700],["Soft",3500],["Neutral",4500],["Daylight",5500],["Cool",6500]];
+const MORECOLORS = ["#ff3b30","#ff7a45","#ff9500","#ffcc00","#34c759","#00c7be","#30b0ff","#007aff","#5856d6","#af52de","#ff2d92","#ffffff"];
+function openLight(id){
+  let ov=document.getElementById("liteOverlay");
+  if(!ov){
+    ov=document.createElement("div"); ov.id="liteOverlay";
+    ov.style.cssText="position:fixed;inset:0;z-index:160;display:none;align-items:flex-end;justify-content:center;background:rgba(4,6,18,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)";
+    ov.innerHTML='<div id="liteCard"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click",e=>{ if(e.target===ov) ov.style.display="none"; });
+  }
+  ov.dataset.dev=id; renderLightDetail(); ov.style.display="flex";
+}
+function closeLight(){ const ov=document.getElementById("liteOverlay"); if(ov) ov.style.display="none"; }
+function renderLightDetail(){
+  const ov=document.getElementById("liteOverlay"); if(!ov) return;
+  const d=byId(ov.dataset.dev); const card=document.getElementById("liteCard"); if(!d) return;
+  const on=d._state.on&&d.online, bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;
+  card.style.cssText="width:min(540px,100%);box-sizing:border-box;--cardc:"+cssRgb(d._state.color)+";background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:18px 18px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto;box-shadow:0 -12px 40px rgba(0,0,0,.28)";
+  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-ldcol="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
+  const whites = WHITES.map(([n,k])=>`<button class="ld-white" data-ldwhite="${k}">${n}</button>`).join("");
+  card.innerHTML=`
+    <div class="ld-head">
+      <span class="litedot" style="--litec:${cssRgb(d._state.color)};width:15px;height:15px"></span>
+      <div style="flex:1;min-width:0"><div class="ld-name">${d.deviceName}</div>
+        <div class="ld-sub">${d.online?d.sku:'Offline · '+d.sku}</div></div>
+      <div class="sw ${on?'lon':''}" data-pwr="${d.device}"><span class="knob"></span></div>
+      <button class="ld-x" data-ldclose aria-label="Close">✕</button>
+    </div>
+    <div class="ld-sec"><div class="ld-lbl"><span>Brightness</span><span data-ldbrival>${bri}%</span></div>
+      <input type="range" min="1" max="100" value="${bri}" data-ldbri ${d.online?'':'disabled'} style="--p:${bri}%"></div>
+    <div class="ld-sec"><div class="ld-lbl"><span>Color</span></div>
+      <input type="range" class="huebar" min="0" max="360" value="${hue}" data-ldhue ${d.online?'':'disabled'}>
+      <div class="ld-sws">${swatches}<input type="color" class="swatch picker ld-pick" value="${rgbHex(d._state.color)}" data-ldpick ${d.online?'':'disabled'} title="Custom color"></div>
+    </div>
+    <div class="ld-sec"><div class="ld-lbl"><span>White / temperature</span><span data-ldtempval>${temp}K</span></div>
+      <input type="range" class="tempbar" min="2000" max="9000" step="100" value="${temp}" data-ldtemp ${d.online?'':'disabled'}>
+      <div class="ld-whites">${whites}</div>
+    </div>`;
+  const q=s=>card.querySelector(s);
+  q("[data-ldclose]").onclick=closeLight;
+  q("[data-pwr]").onclick=()=>{ if(!d.online) return toast("Light is offline",true); const nx=!d._state.on; d._state.on=nx; Govee.setPower(d.device,nx).catch(()=>{}); render(); renderLightDetail(); };
+  const bel=q("[data-ldbri]"); bel.oninput=()=>{ const v=+bel.value; d._state.brightness=v; bel.style.setProperty("--p",v+"%"); q("[data-ldbrival]").textContent=v+"%"; clearTimeout(d._ldb); d._ldb=setTimeout(()=>Govee.setBright(d.device,v).catch(()=>{}),220); };
+  const hel=q("[data-ldhue]"); hel.oninput=()=>{ const v=hueToRgb(+hel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldh); d._ldh=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); },180); };
+  const pel=q("[data-ldpick]"); pel.oninput=()=>{ const v=hexInt(pel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldp); d._ldp=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); },180); };
+  const tel=q("[data-ldtemp]"); tel.oninput=()=>{ const v=+tel.value; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); q("[data-ldtempval]").textContent=v+"K"; clearTimeout(d._ldt); d._ldt=setTimeout(()=>{ Govee.setColorTemp(d.device,v).catch(()=>{}); render(); },220); };
+  card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
+  card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); Govee.setColorTemp(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
+}
 
 /* ============================================================
    GROUPS MANAGER  — create groups, assign lights (exclusive membership).

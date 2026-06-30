@@ -114,9 +114,13 @@
   .swatch{width:28px;height:28px;border-radius:50%; border:2px solid var(--line-strong); cursor:pointer; transition:transform .15s}
   .swatch:active{transform:scale(.88)}
   .swatch.sel{border-color:var(--ink); box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 13%,transparent)}
-  .swatch.custom{display:flex;align-items:center;justify-content:center; font-size:13px; background:
-    conic-gradient(#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); position:relative}
-  .swatch.custom input{position:absolute; inset:0; opacity:0; cursor:pointer}
+  /* native color input styled as a round, directly-clickable swatch */
+  input[type=color].picker{appearance:none; -webkit-appearance:none; padding:0; cursor:pointer;
+    background:conic-gradient(#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e)}
+  input[type=color].picker::-webkit-color-swatch-wrapper{padding:0; border-radius:50%}
+  input[type=color].picker::-webkit-color-swatch{border:none; border-radius:50%}
+  input[type=color].picker::-moz-color-swatch{border:none; border-radius:50%}
+  input[type=color].picker:disabled{opacity:.4; cursor:not-allowed}
   /* footer status */
   footer{flex:0 0 auto; padding:12px 18px calc(12px + env(safe-area-inset-bottom));
     border-top:1px solid var(--line); font-size:13px; color:var(--ink-2);
@@ -335,7 +339,7 @@ function render(){
         </span></div>
         <div class="gctrl">
           <input type="range" min="1" max="100" value="${avg}" data-grpbri="${name}" style="--p:${avg}%">
-          <span class="gswatches">${sw}</span>
+          <span class="gswatches">${sw}<input type="color" class="swatch picker" data-grppick="${name}" value="#ffffff" title="Custom color for this group"></span>
         </div>
         <div class="grid">${list.map(cardHTML).join("")}</div>`;
   }
@@ -370,8 +374,8 @@ function cardHTML(d){
     </div>
     <div class="colors">
       ${presets}
-      <span class="swatch custom" title="Custom color">🎨<input type="color"
-            value="${rgbHex(d._state.color)}" data-pick="${d.device}"></span>
+      <input type="color" class="swatch picker" value="${rgbHex(d._state.color)}"
+             data-pick="${d.device}" title="Pick a custom color" ${d.online?'':'disabled'}>
     </div>
   </div>`;
 }
@@ -428,6 +432,13 @@ app.addEventListener("input", e=>{
     clearTimeout(gbri._t); gbri._t=setTimeout(()=>{
       DEVICES.filter(d=>d.room===name && d.online).forEach(d=>Govee.setBright(d.device,v).catch(()=>{}));
     },250); // debounce while dragging the group slider
+  }
+  const gpick = e.target.closest("[data-grppick]");
+  if(gpick){ const v=hexInt(gpick.value); const name=gpick.dataset.grppick;
+    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>d._state.color=v);
+    clearTimeout(gpick._t); gpick._t=setTimeout(()=>{
+      DEVICES.filter(d=>d.room===name && d.online).forEach(d=>Govee.setColor(d.device,v).catch(()=>{}));
+    },180);
   }
 });
 document.querySelector("header").addEventListener("click", e=>{

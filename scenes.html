@@ -130,11 +130,7 @@
     <div id="gtrig"></div>
     <div class="row" style="margin-top:10px;flex-wrap:nowrap">
       <input id="gtrigev" placeholder="touchdown" style="flex:1.3" />
-      <select id="gtrigact" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:12px;color:var(--ink);font:14px system-ui;padding:9px 10px">
-        <option value="flash">Flash colors</option>
-        <option value="allon">All lights on</option>
-        <option value="alloff">All lights off</option>
-      </select>
+      <select id="gtrigact" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:12px;color:var(--ink);font:14px system-ui;padding:9px 10px"></select>
       <button id="gtrigadd" class="btn">Add</button>
     </div>
   </main>
@@ -391,16 +387,39 @@ const TEAMS = {
   "Patriots":[[0,34,68],[198,12,48]],         "Steelers":[[16,24,32],[255,182,18]],
   "Saints":[[211,188,141],[16,24,31]],        "Seahawks":[[0,34,68],[105,190,40]],
   "Crimson Tide (Bama)":[[158,27,50],[130,138,143]], "Tigers (LSU)":[[70,29,124],[253,208,35]],
+  "Gators (Florida)":[[250,70,22],[0,33,165]],       "Seminoles (FSU)":[[120,47,64],[206,184,136]],
+  "Bulldogs (Georgia)":[[186,12,47],[0,0,0]],         "Volunteers (Tenn)":[[255,130,0],[255,255,255]],
   "Custom":[[255,60,60],[255,255,255]],
 };
 let team = localStorage.getItem("gv_team") || "Falcons";
 const teamCols = () => TEAMS[team] || TEAMS["Custom"];
 
-const ACT_LABEL = { flash:"Flash team colors", allon:"All lights on", alloff:"All lights off" };
+// A trigger action can be a flash, all on/off, OR a full scene (library or saved).
 function buildAction(sel){
   if(sel==="allon")  return {kind:"allOn"};
   if(sel==="alloff") return {kind:"allOff"};
-  return {kind:"flash", cols:teamCols(), times:3};
+  if(sel.startsWith("scene:")){ const p=PRESETS[+sel.slice(6)]; return {kind:"scene", scene:presetToScene(p)}; }
+  if(sel.startsWith("saved:")){ const s=SAVED[+sel.slice(6)]; return s ? {kind:"scene", scene:s} : {kind:"flash", cols:teamCols(), times:3}; }
+  return {kind:"flash", cols:teamCols(), times:3};   // default
+}
+function actLabel(sel){
+  if(sel==="allon")  return "All lights on";
+  if(sel==="alloff") return "All lights off";
+  if(sel.startsWith("scene:")) return "Scene: "+(PRESETS[+sel.slice(6)]?.name||"scene");
+  if(sel.startsWith("saved:")) return "Scene: "+(SAVED[+sel.slice(6)]?.name||"saved");
+  return "Flash team colors";
+}
+// Populate the action dropdown: flash / on / off + every library + saved scene.
+function renderTrigActs(){
+  const sel=$("#gtrigact"); if(!sel) return;
+  let h='<option value="flash">⚡ Flash team colors</option>'
+       +'<option value="allon">All lights on</option>'
+       +'<option value="alloff">All lights off</option>';
+  if(PRESETS && PRESETS.length)
+    h+='<optgroup label="Scenes">'+PRESETS.map((p,i)=>`<option value="scene:${i}">🎬 ${p.name}</option>`).join("")+'</optgroup>';
+  if(SAVED && SAVED.length)
+    h+='<optgroup label="Saved scenes">'+SAVED.map((s,i)=>`<option value="saved:${i}">⭐ ${s.name}</option>`).join("")+'</optgroup>';
+  sel.innerHTML=h;
 }
 
 let TRIGGERS = [
@@ -465,7 +484,7 @@ $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return
 $("#gtrigadd").onclick=async()=>{
   const ev=$("#gtrigev").value.trim().toLowerCase().replace(/\s+/g,"_"); if(!ev)return;
   const sel=$("#gtrigact").value;
-  await trigAdd({ event:ev, label:ACT_LABEL[sel], action:buildAction(sel), enabled:true });
+  await trigAdd({ event:ev, label:actLabel(sel), action:buildAction(sel), enabled:true });
   $("#gtrigev").value=""; renderTriggers();
   msg(`Trigger added — point an IFTTT applet at ${hookUrl(ev)}`); };
 $("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team",team); renderTeam();
@@ -484,7 +503,7 @@ document.addEventListener("click", async e=>{
   const aud=e.target.closest("[data-audel]"); if(aud){ const id=aud.dataset.audel; await autoDel(id); await renderAuto(); msg("Automation removed"); return; }
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
-renderLibFilter(); renderLibrary(); loadSGroups().then(renderAuto); renderTeam(); renderTriggers();
+renderLibFilter(); renderLibrary(); loadSGroups().then(renderAuto); renderTeam(); renderTriggers(); renderTrigActs();
 (async()=>{
   await loadDevices(); renderBuiltin();
   if(!CONFIG.USE_MOCK){ TRIGGERS = await trigGet(); renderTriggers(); }

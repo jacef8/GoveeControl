@@ -3,59 +3,79 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0e1f" />
+<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0c1018" media="(prefers-color-scheme: dark)" />
 <link rel="manifest" href="manifest.json" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <title>Govee · Scenes &amp; Automations</title>
 <style>
+  /* ============ THEME (auto light/dark) — shared with index.html ============ */
   :root{
-    --ink:#eef2ff; --dim:#8b97b8; --accent:#6e8bff; --on:#39d98a; --avh:100dvh;
-    --glass:rgba(255,255,255,.05); --glass2:rgba(255,255,255,.09);
-    --stroke:rgba(255,255,255,.10); --stroke2:rgba(255,255,255,.17);
-    --line:rgba(255,255,255,.16); --bw:1px; --radius:18px;
+    --avh:100dvh; --bw:1px; --radius:16px;
+    --bg:linear-gradient(180deg,#f5f7fc 0%,#e9edf5 100%);
+    --surface:#ffffff; --surface-2:#f2f5fa;
+    --ink:#0f1421; --ink-2:#475067; --dim:#5a647a; --ink-faint:#828ca3;
+    --line:#e4e9f1; --line-strong:#d3dae6; --stroke:#e4e9f1; --stroke2:#d3dae6;
+    --glass:#ffffff; --glass2:#f2f5fa;
+    --accent:#2f6bf2; --accent-soft:#e7eefc; --on:#15a35a; --off:#e23b48;
+    --shadow-card:0 6px 20px rgba(24,38,74,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:radial-gradient(125% 80% at 50% -10%,#19223a 0%,#0d1320 55%,#0a0e18 100%);
+      --surface:#161d2c; --surface-2:#1d2536;
+      --ink:#f3f6fc; --ink-2:#aab4cb; --dim:#9aa6bd; --ink-faint:#6f7b94;
+      --line:#283145; --line-strong:#36405a; --stroke:#283145; --stroke2:#36405a;
+      --glass:#161d2c; --glass2:#1d2536;
+      --accent:#5e8bff; --accent-soft:#23304e; --on:#33d27e; --off:#ff5d6a;
+      --shadow-card:0 10px 30px rgba(0,0,0,.4);
+    }
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
-    font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-    background:radial-gradient(125% 85% at 12% -5%, #1b1648 0%, #0c1024 52%, #070912 100%)}
+    font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; line-height:1.5;
+    background:var(--bg); background-attachment:fixed}
   body{display:flex; flex-direction:column}
-  header{flex:0 0 auto; padding:calc(15px + env(safe-area-inset-top)) 18px 14px;
-    display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--stroke);
-    background:rgba(255,255,255,.04); backdrop-filter:blur(22px); -webkit-backdrop-filter:blur(22px)}
-  header h1{font-size:19px; margin:0; font-weight:650; letter-spacing:-.3px; flex:1; display:flex; align-items:center; gap:10px}
-  .logo{width:26px;height:26px;border-radius:9px;background:
-    conic-gradient(from 210deg,#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); box-shadow:0 0 18px rgba(120,140,255,.4)}
-  .tab{appearance:none; text-decoration:none; border:1px solid var(--stroke2); background:var(--glass);
-    color:#aeb6cc; font-weight:600; font-size:13px; padding:8px 14px; border-radius:13px; cursor:pointer; backdrop-filter:blur(10px)}
-  .tab.active{border-color:rgba(110,139,255,.5); color:#b9c6ff; background:rgba(110,139,255,.15)}
+  header{position:sticky; top:0; z-index:20; flex:0 0 auto; padding:calc(11px + env(safe-area-inset-top)) 16px 12px;
+    display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--line);
+    background:color-mix(in srgb,var(--surface) 86%, transparent); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px)}
+  header h1{font-size:20px; margin:0; font-weight:750; letter-spacing:-.4px; flex:1; display:flex; align-items:center; gap:11px; color:var(--ink)}
+  .logo{width:30px;height:30px;border-radius:10px;background:
+    conic-gradient(from 210deg,#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); box-shadow:0 2px 10px rgba(120,140,255,.4)}
+  .tab{appearance:none; text-decoration:none; border:1px solid var(--line-strong); background:var(--surface-2);
+    color:var(--ink-2); font-weight:600; font-size:14px; padding:9px 15px; border-radius:12px; cursor:pointer}
+  .tab.active{border-color:color-mix(in srgb,var(--accent) 50%,transparent); color:var(--accent); background:var(--accent-soft)}
   main{flex:1 1 auto; overflow:auto; padding:18px}
-  .sttl{font-size:13px; font-weight:600; color:#cdd6ee; margin:24px 2px 12px; display:flex; align-items:center; gap:8px}
-  .sttl:first-child{margin-top:4px}
-  textarea,input,select{background:rgba(255,255,255,.05); border:1px solid var(--stroke); border-radius:14px; color:var(--ink); font:15px system-ui; padding:11px 13px; width:100%; outline:none}
-  textarea:focus,input:focus,select:focus{border-color:rgba(110,139,255,.5); background:rgba(255,255,255,.07)}
+  .sttl{font-size:17px; font-weight:700; color:var(--ink); margin:26px 2px 13px; display:flex; align-items:center; gap:8px; letter-spacing:-.3px}
+  .sttl:first-child{margin-top:6px}
+  textarea,input,select{background:var(--surface-2); border:1px solid var(--line-strong); border-radius:13px; color:var(--ink); font:15px 'Inter',system-ui; padding:12px 14px; width:100%; outline:none}
+  textarea::placeholder,input::placeholder{color:var(--ink-faint)}
+  textarea:focus,input:focus,select:focus{border-color:var(--accent); background:var(--surface)}
   textarea{resize:none}
-  .btn{appearance:none; border:1px solid var(--stroke2); background:var(--glass); color:#cdd6ee; font-weight:600; font-size:14px; padding:10px 15px; border-radius:14px; cursor:pointer; backdrop-filter:blur(10px); transition:transform .15s, background .2s}
-  .btn:hover{background:var(--glass2)}
+  .btn{appearance:none; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink); font:600 14.5px 'Inter',system-ui; padding:11px 17px; border-radius:13px; cursor:pointer; transition:transform .15s, background .2s}
   .btn:active{transform:scale(.97)}
-  .btn.blue{border-color:rgba(110,139,255,.45); color:#b9c6ff; background:rgba(110,139,255,.15)}
-  .btn.green{border-color:rgba(57,217,138,.4); color:#7ff0b6; background:rgba(57,217,138,.12)}
+  .btn.blue{border-color:transparent; color:#fff; background:var(--accent)}
+  .btn.green{border-color:color-mix(in srgb,var(--on) 45%,transparent); color:var(--on); background:color-mix(in srgb,var(--on) 13%,var(--surface))}
   .row{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
-  .ex{border:1px solid var(--stroke); background:var(--glass); color:#aeb6cc; font-size:12px; font-weight:600; padding:7px 12px; border-radius:11px; cursor:pointer}
-  .ex:hover{background:var(--glass2)}
-  .card{border:1px solid var(--stroke); border-radius:16px; background:var(--glass); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); padding:14px}
-  .card.hi{border-color:rgba(110,139,255,.5); box-shadow:0 8px 30px -14px rgba(110,139,255,.7)}
+  .ex{border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink-2); font-size:13px; font-weight:600; padding:8px 13px; border-radius:11px; cursor:pointer}
+  .card{border:1px solid var(--line); border-radius:15px; background:var(--surface); padding:15px; box-shadow:var(--shadow-card)}
+  .card.hi{border-color:color-mix(in srgb,var(--accent) 50%,transparent); box-shadow:0 10px 30px -14px color-mix(in srgb,var(--accent) 65%,transparent)}
   .saved{display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px}
   .scell{cursor:pointer; transition:transform .15s, border-color .25s}
-  .scell:hover{border-color:var(--stroke2)}
+  .scell:hover{border-color:var(--line-strong)}
   .scell:active{transform:scale(.98)}
-  .bar{height:32px; border-radius:10px; overflow:hidden}
-  .pill{font-size:11px; padding:3px 9px; border-radius:9px; border:1px solid rgba(110,139,255,.35); color:#b9c6ff; background:rgba(110,139,255,.15)}
-  .arow{display:flex; align-items:center; gap:11px; border:1px solid var(--stroke); border-radius:16px; background:var(--glass); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); padding:12px 14px; margin-bottom:10px}
-  .sw{width:52px;height:30px;border-radius:16px;border:1px solid var(--stroke2);background:rgba(255,255,255,.05);position:relative;cursor:pointer;flex:0 0 auto;transition:.25s}
-  .sw .k{position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#aeb6cc;transition:left .25s,background .25s;box-shadow:0 2px 6px rgba(0,0,0,.35)}
-  .sw.on{border-color:rgba(57,217,138,.5);background:rgba(57,217,138,.22)}
-  .sw.on .k{left:26px;background:var(--on)}
-  footer{flex:0 0 auto; padding:13px 18px calc(13px + env(safe-area-inset-bottom)); border-top:1px solid var(--stroke); background:rgba(255,255,255,.03); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); font-size:12px; color:var(--dim); display:flex; gap:8px}
-  .badge{margin-left:auto; background:rgba(255,209,102,.12); color:#ffd166; font-weight:600; font-size:11px; border:1px solid rgba(255,209,102,.25); padding:3px 10px; border-radius:9px}
+  .bar{height:34px; border-radius:10px; overflow:hidden}
+  .pill{font-size:12px; padding:3px 10px; border-radius:9px; border:1px solid color-mix(in srgb,var(--accent) 40%,transparent); color:var(--accent); background:var(--accent-soft)}
+  .arow{display:flex; align-items:center; gap:11px; border:1px solid var(--line); border-radius:15px; background:var(--surface); padding:13px 15px; margin-bottom:10px; box-shadow:var(--shadow-card)}
+  .sw{width:54px;height:32px;border-radius:17px;border:1px solid var(--line-strong);background:var(--surface-2);position:relative;cursor:pointer;flex:0 0 auto;transition:.25s}
+  .sw .k{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--ink-faint);transition:left .25s,background .25s;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .sw.on{border-color:color-mix(in srgb,var(--on) 55%,transparent);background:color-mix(in srgb,var(--on) 22%,var(--surface))}
+  .sw.on .k{left:27px;background:var(--on)}
+  footer{flex:0 0 auto; padding:12px 18px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); font-size:13px; color:var(--ink-2); display:flex; gap:8px}
+  .badge{margin-left:auto; background:color-mix(in srgb,#f5a623 15%,var(--surface)); color:#b9760a; font-weight:600; font-size:12px; border:1px solid color-mix(in srgb,#f5a623 35%,transparent); padding:4px 11px; border-radius:9px}
+  @media (prefers-color-scheme: dark){ .badge{color:#ffd166} }
 </style>
 </head>
 <body>
@@ -69,9 +89,10 @@
     <div class="sttl">Describe a scene</div>
     <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
     <div class="row" style="margin-top:9px">
-      <button id="ggen" class="btn blue">Generate</button>
-      <span id="gchips" class="row"></span>
+      <button id="ggen" class="btn blue">✨ Generate scene</button>
+      <span style="font-size:12px;color:var(--ink-faint)">or press Enter</span>
     </div>
+    <div id="gchips" class="row" style="margin-top:9px"></div>
     <div id="gpreview" style="margin-top:13px"></div>
 
     <div class="sttl">Scene library</div>
@@ -88,7 +109,7 @@
     <div id="gauto"></div>
     <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap">
       <input id="gschin" placeholder="off at 11pm" style="flex:1; min-width:150px" />
-      <select id="gschgrp" title="Which lights" style="background:#0e1424;border:var(--bw) solid var(--line);border-radius:12px;color:var(--ink);font:14px system-ui;padding:8px 10px"></select>
+      <select id="gschgrp" title="Which lights" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:12px;color:var(--ink);font:14px system-ui;padding:8px 10px"></select>
       <button id="gschadd" class="btn">Add</button>
     </div>
 
@@ -103,13 +124,13 @@
     </div>
     <div class="card" style="margin-bottom:11px;display:flex;align-items:center;gap:10px">
       <div style="font-size:13px;font-weight:800">Team colors</div>
-      <select id="gteam" style="background:#0e1424;border:var(--bw) solid var(--line);border-radius:12px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
+      <select id="gteam" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:12px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
       <span id="gteamsw"></span>
     </div>
     <div id="gtrig"></div>
     <div class="row" style="margin-top:10px;flex-wrap:nowrap">
       <input id="gtrigev" placeholder="touchdown" style="flex:1.3" />
-      <select id="gtrigact" style="background:#0e1424;border:var(--bw) solid var(--line);border-radius:12px;color:var(--ink);font:14px system-ui;padding:9px 10px">
+      <select id="gtrigact" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:12px;color:var(--ink);font:14px system-ui;padding:9px 10px">
         <option value="flash">Flash colors</option>
         <option value="allon">All lights on</option>
         <option value="alloff">All lights off</option>
@@ -430,6 +451,7 @@ function renderTriggers(){
 $("#ggen").onclick=async()=>{ const p=$("#gp").value||"multicolored moving party";
   msg("Generating scene…"); const s=await designScene(p); renderPreview(s);
   msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`); };
+$("#gp").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#ggen").click(); } });
 $("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
 $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;
   msg("Parsing time…");
@@ -476,8 +498,8 @@ renderLibFilter(); renderLibrary(); loadSGroups().then(renderAuto); renderTeam()
   const header=document.querySelector("header"); if(!header) return;
   const gear=document.createElement("button");
   gear.title="Settings"; gear.textContent="⚙"; gear.setAttribute("data-cfg","1");
-  gear.style.cssText="margin-left:auto;padding:7px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:inherit;font-size:15px;line-height:1;cursor:pointer";
-  header.appendChild(gear);
+  gear.style.cssText="margin-left:6px;flex:0 0 auto;width:40px;height:40px;border-radius:12px;border:1px solid var(--line-strong,var(--line,rgba(128,128,128,.35)));background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer";
+  (header.querySelector(".appbar")||header).appendChild(gear);
 
   const ov=document.createElement("div");
   ov.style.cssText="position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:20px";

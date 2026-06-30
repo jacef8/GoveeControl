@@ -38,6 +38,14 @@ app.use((req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
+
+/* ---------- serve the PWA front-end from this same service ----------
+   One Railway URL serves both the app (index.html/scenes.html at repo root)
+   and the API routes below. Static files are matched first; anything that
+   isn't a file (e.g. /health, /govee/*) falls through to the routes. */
+const STATIC_DIR = fileURLToPath(new URL("..", import.meta.url));
+app.use(express.static(STATIC_DIR));
+
 const gate = (req, res, next) => {
   if (!PASSCODE) return next();                       // no passcode configured = open
   if (req.get("X-Passcode") === PASSCODE) return next();

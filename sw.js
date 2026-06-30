@@ -1,6 +1,6 @@
 /* Govee Control — minimal offline shell.
    Bump CACHE on every deploy so installed PWAs don't serve a stale page. */
-const CACHE = "govee-v2";
+const CACHE = "govee-v3";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", e => {
@@ -15,7 +15,7 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   // Never cache proxy/API calls — always go to network for live light state.
-  if (url.pathname.startsWith("/govee/")) return;
+  if (/^\/(govee|ai|automations|triggers|health)\b/.test(url.pathname)) return;
   // App shell: cache-first, fall back to network.
   e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request)));
 });

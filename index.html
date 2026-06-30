@@ -139,9 +139,10 @@ const CONFIG = (() => {
   // so going live needs no code edit and no secret committed to the repo.
   // Mock mode stays on until a proxy URL is saved.
   let s = {}; try { s = JSON.parse(localStorage.getItem("gv_cfg") || "{}"); } catch {}
-  const PROXY_BASE = (s.proxyBase || "").replace(/\/+$/, "");
+  const sameOrigin = location.protocol.startsWith("http") ? location.origin : "";
+  const PROXY_BASE = (s.proxyBase || sameOrigin).replace(/\/+$/, "");
   return {
-    USE_MOCK: !PROXY_BASE,
+    USE_MOCK: !(s.live || s.proxyBase),   // demo until the user saves real settings
     PROXY_BASE,
     PASSCODE: s.passcode || "",
     POLL_MS: 45000,            // state auto-refresh interval
@@ -397,7 +398,7 @@ setInterval(load, CONFIG.POLL_MS);
   ov.innerHTML=
     '<div style="width:min(420px,92vw);box-sizing:border-box;background:rgba(22,26,48,.94);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:22px;color:#fff;box-shadow:0 24px 70px -20px rgba(0,0,0,.7)">'
     +'<h2 style="margin:0 0 4px;font-size:19px;font-weight:600">Connect to your lights</h2>'
-    +'<p style="margin:0 0 16px;color:#aab;font-size:13px;line-height:1.5">Leave the URL blank to stay in demo mode. Fill it in once your Railway proxy is deployed.</p>'
+    +'<p style="margin:0 0 16px;color:#aab;font-size:13px;line-height:1.5">The URL is pre-filled to this site. Enter your passcode and Save to connect to your real lights.</p>'
     +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Proxy URL</label>'
     +'<input id="cfgUrl" placeholder="https://your-app.up.railway.app" style="width:100%;box-sizing:border-box;padding:11px 13px;margin-bottom:14px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">'
     +'<label style="display:block;font-size:12px;color:#ccd;margin-bottom:6px">Passcode</label>'
@@ -410,7 +411,7 @@ setInterval(load, CONFIG.POLL_MS);
   document.body.appendChild(ov);
   const $=s=>ov.querySelector(s), msg=$("#cfgMsg");
   const norm=v=>v.trim().replace(/\/+$/,"");
-  gear.addEventListener("click",()=>{ $("#cfgUrl").value=cfg.proxyBase||""; $("#cfgPass").value=cfg.passcode||""; msg.textContent=""; ov.style.display="flex"; });
+  gear.addEventListener("click",()=>{ $("#cfgUrl").value=cfg.proxyBase||(location.protocol.startsWith("http")?location.origin:""); $("#cfgPass").value=cfg.passcode||""; msg.textContent=""; ov.style.display="flex"; });
   const close=()=>ov.style.display="none";
   $("#cfgClose").addEventListener("click",close);
   ov.addEventListener("click",e=>{ if(e.target===ov) close(); });
@@ -424,7 +425,7 @@ setInterval(load, CONFIG.POLL_MS);
     }catch{ msg.style.color="#ffb4b4"; msg.textContent="Couldn't reach it — check the URL / passcode."; }
   });
   $("#cfgSave").addEventListener("click",()=>{
-    localStorage.setItem("gv_cfg",JSON.stringify({proxyBase:norm($("#cfgUrl").value),passcode:$("#cfgPass").value.trim()}));
+    localStorage.setItem("gv_cfg",JSON.stringify({proxyBase:norm($("#cfgUrl").value),passcode:$("#cfgPass").value.trim(),live:true}));
     location.reload();
   });
 })();

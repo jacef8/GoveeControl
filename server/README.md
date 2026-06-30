@@ -19,11 +19,15 @@ npm start                 # http://localhost:4319/health
 
 ## Deploy to Railway
 
-1. New project → deploy from repo → set the service **Root Directory** to `server`.
+This is a **single service**: the Express server serves the PWA front-end
+(`index.html` / `scenes.html` at the repo root) *and* the API, from one URL.
+
+1. New project → deploy from repo. Leave **Root Directory** at the repo root
+   (blank) — the root `package.json` runs `node server/server.js`.
 2. Set Variables: `GOVEE_API_KEY`, `ANTHROPIC_API_KEY`, `PASSCODE`, and optionally `LAT`/`LON`.
 3. Add a **Volume** mounted at `/data` and set `DATA_DIR=/data` so automations + triggers survive redeploys.
-4. Railway provides `PORT` and runs `npm start` (see `railway.json`). Open `https://<your-app>.up.railway.app/health` to confirm.
-5. Point the PWA at it with **no code edit**: open the app → ⚙ Settings → paste the URL + passcode → Test → Save. (Stored in `localStorage`; the app stays in demo/mock mode until a URL is set.)
+4. Railway provides `PORT` and runs `npm start` (see `railway.json`). Open `https://<your-app>.up.railway.app/` (the app) and `/health` (the API) to confirm.
+5. In the app, tap ⚙ Settings — the URL is pre-filled to the current site, so just enter your `PASSCODE` → Test → Save. (Stored in `localStorage`; the app stays in demo mode until you save.)
 
 ## Notes
 

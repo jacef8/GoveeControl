@@ -1,0 +1,16 @@
+{
+  "name": "govee-control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GoveeControl — single Railway service serving the PWA front-end + the Govee/AI proxy API.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3"
+  }
+}

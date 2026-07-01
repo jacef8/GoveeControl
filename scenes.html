@@ -86,6 +86,18 @@
   </header>
 
   <main>
+    <div class="card" style="margin-top:4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:170px">
+        <span style="font-size:13px;font-weight:800;white-space:nowrap">Apply to</span>
+        <select id="gtarget" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:180px">
+        <span style="font-size:12px;color:var(--dim);white-space:nowrap">Brightness</span>
+        <input type="range" id="gbright" min="1" max="100" value="100" style="flex:1">
+        <span id="gbrightval" style="font-size:12px;color:var(--ink);font-weight:600;min-width:36px;text-align:right">100%</span>
+      </div>
+    </div>
+
     <div class="sttl">Describe a scene</div>
     <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
     <div class="row" style="margin-top:9px">
@@ -174,6 +186,32 @@ async function loadDevices(){
 }
 const deviceNames = () => DEVICES.length ? DEVICES.map(d=>d.deviceName) : LIGHTS;
 
+/* ---------- scene target (All / a group / one light) + brightness ---------- */
+let sceneTarget = "all";
+function renderTargets(){
+  const sel=document.getElementById("gtarget"); if(!sel) return;
+  let h='<option value="all">All lights</option>';
+  if(SGROUPS && SGROUPS.length) h+='<optgroup label="Groups">'+SGROUPS.map(g=>`<option value="grp:${g.id}">${g.name}</option>`).join("")+'</optgroup>';
+  if(DEVICES && DEVICES.length) h+='<optgroup label="Lights">'+DEVICES.map(d=>`<option value="dev:${d.device}">${d.deviceName}</option>`).join("")+'</optgroup>';
+  sel.innerHTML=h; sel.value=sceneTarget;
+}
+function currentTargets(){
+  if(sceneTarget==="all") return deviceNames();
+  if(sceneTarget.startsWith("grp:")){ const g=(SGROUPS||[]).find(x=>x.id===sceneTarget.slice(4));
+    const names=g ? (g.devices||[]).map(id=>(DEVICES.find(d=>d.device===id)||{}).deviceName).filter(Boolean) : [];
+    return names.length ? names : deviceNames(); }
+  if(sceneTarget.startsWith("dev:")){ const d=DEVICES.find(x=>x.device===sceneTarget.slice(4)); return d?[d.deviceName]:deviceNames(); }
+  return deviceNames();
+}
+async function setBrightFor(val){
+  if(CONFIG.USE_MOCK){ msg("Brightness "+val+"% (demo)"); return; }
+  const names=currentTargets();
+  const ids=names.map(n=>(DEVICES.find(d=>d.deviceName===n)||{}).device).filter(Boolean);
+  await Promise.allSettled(ids.map(id=>fetch(CONFIG.PROXY_BASE+"/govee/control",{method:"POST",headers:phdr(),
+    body:JSON.stringify({device:id,capability:"devices.capabilities.range",instance:"brightness",value:val})})));
+  msg("Brightness "+val+"%"+(sceneTarget==="all"?"":" (selected lights)"));
+}
+
 const RECIPES = [
   {k:["party","rave","dance","disco","multicolor","colorful","rainbow"],name:"Party Pulse",motion:true,step:1100,via:"custom animator",cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
   {k:["cozy","warm","movie","relax","chill","comfy","amber"],name:"Cozy Glow",motion:false,step:0,via:"static color",cols:[[255,150,70],[255,110,40],[255,180,110]]},
@@ -198,13 +236,14 @@ async function designScene(prompt){
   return {name:best.name,motion:best.motion,step:best.step,via:best.via,cols:best.cols,targets:LIGHTS.slice()};
 }
 async function applyScene(s){
+  s.targets = currentTargets();   // honor the "Apply to" selection
   if(!CONFIG.USE_MOCK){ await fetch(CONFIG.PROXY_BASE+"/govee/scene",{method:"POST",
     headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify(s)}); }
   return true;
 }
 
 /* ---------- preview rendering ---------- */
-let anim=null;
+let anim=null, lastScene=null;
 const $=s=>document.querySelector(s);
 function msg(t){ $("#gmsg").textContent=t; }
 function stripHTML(cols,id){ return `<div id="${id}" class="bar" style="display:flex;gap:4px;border:2px solid var(--line)">`+
@@ -219,6 +258,7 @@ function startPvAnim(s){
 }
 function renderPreview(s){
   if(anim){clearInterval(anim);anim=null;}
+  lastScene=s; s.targets=currentTargets();   // reflect the "Apply to" selection
   const spd = Math.max(0,Math.min(100, Math.round((4000-(s.step||1500))/3700*100)));
   $("#gpreview").innerHTML = `<div class="card hi">
     <div class="row" style="margin-bottom:10px"><span style="font-weight:800;font-size:16px">${s.name}</span>
@@ -294,7 +334,7 @@ function renderLibrary(){
       <div style="font-size:11px;color:var(--dim);margin-top:2px">${p.cat} · ${p.motion?'moving':'static'}</div></div>`;
   }).join("");
 }
-function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:deviceNames(), cols:p.cols}; }
+function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:currentTargets(), cols:p.cols}; }
 
 /* ---------- device built-in scenes (smooth, hardware-run) ---------- */
 async function getBuiltinScenes(){
@@ -516,9 +556,14 @@ document.addEventListener("click", async e=>{
   const aud=e.target.closest("[data-audel]"); if(aud){ const id=aud.dataset.audel; await autoDel(id); await renderAuto(); msg("Automation removed"); return; }
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
-renderLibFilter(); renderLibrary(); loadSGroups().then(renderAuto); renderTeam(); renderTriggers(); renderTrigActs();
+renderLibFilter(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); }); renderTeam(); renderTriggers(); renderTrigActs();
+$("#gtarget").onchange=()=>{ sceneTarget=$("#gtarget").value;
+  if(lastScene){ lastScene.targets=currentTargets(); renderPreview(lastScene); }
+  const opt=$("#gtarget").selectedOptions[0]; msg("Scenes apply to: "+(opt?opt.textContent:"All lights")); };
+$("#gbright").oninput=()=>{ const v=+$("#gbright").value; $("#gbrightval").textContent=v+"%";
+  clearTimeout(window._gbt); window._gbt=setTimeout(()=>setBrightFor(v),260); };
 (async()=>{
-  await loadDevices(); renderBuiltin();
+  await loadDevices(); renderBuiltin(); renderTargets();
   if(!CONFIG.USE_MOCK){ TRIGGERS = await trigGet(); renderTriggers(); }
 })();
 /* ============================================================

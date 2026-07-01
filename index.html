@@ -180,6 +180,17 @@
   /* ---------- light detail sheet ---------- */
   .sw.lon{background:color-mix(in srgb,var(--on) 22%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
   .sw.lon .knob{left:27px; background:var(--on)}
+  .ld-tabs{display:flex; border:1px solid var(--line-strong); border-radius:6px; overflow:hidden; margin:14px 0 2px}
+  .ld-tab{flex:1; border:0; border-left:1px solid var(--line-strong); background:transparent; color:var(--ink-2);
+    font:600 14px 'Inter',system-ui; padding:10px; cursor:pointer}
+  .ld-tab:first-child{border-left:0}
+  .ld-tab.sel{color:var(--accent); background:color-mix(in srgb,var(--accent) 13%,var(--surface))}
+  .ld-sw.psel{border-color:var(--ink); box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 14%,transparent)}
+  .ld-fill{border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink);
+    font:600 12px 'Inter',system-ui; padding:5px 12px; border-radius:5px; cursor:pointer}
+  .segstrip{display:flex; flex-wrap:wrap; gap:4px; margin-top:12px}
+  .seg-cell{width:26px; height:36px; border-radius:3px; border:1px solid var(--line-strong); cursor:pointer; padding:0; transition:transform .1s}
+  .seg-cell:active{transform:scale(.9)}
   .ld-head{display:flex; align-items:center; gap:11px; margin-bottom:4px}
   .ld-name{font-size:17px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .ld-sub{font-size:12.5px; color:var(--ink-faint)}
@@ -268,21 +279,24 @@ const Govee = (() => {
   // ---------- MOCK backend ----------
   const mockDevices = [
     dev("Living Room Lamp","H6008","Living Room", true, true, 70, [255,180,90]),
-    dev("TV Backlight","H6199","Living Room", true, true, 100, [80,120,255]),
-    dev("Kitchen Strip","H6125","Kitchen", true, false, 55, [255,255,255]),
+    dev("TV Backlight","H6199","Living Room", true, true, 100, [80,120,255], 15),
+    dev("Kitchen Strip","H6125","Kitchen", true, false, 55, [255,255,255], 10),
     dev("Bedroom Bulb","H6009","Bedroom", true, true, 30, [255,120,160]),
-    dev("Backyard Flood","H7060","Backyard", true, false, 90, [120,255,160]),
+    dev("Backyard Flood","H7060","Backyard", true, false, 90, [120,255,160], 12),
     dev("Garage Strip","H619A","Backyard", false, false, 60, [255,255,255]), // offline
   ];
-  function dev(name,sku,room,online,on,bri,rgb){
+  function dev(name,sku,room,online,on,bri,rgb,segs){
+    const caps=[
+      {type:"devices.capabilities.on_off",instance:"powerSwitch"},
+      {type:"devices.capabilities.range",instance:"brightness",parameters:{range:{min:1,max:100}}},
+      {type:"devices.capabilities.color_setting",instance:"colorRgb"},
+    ];
+    if(segs) caps.push({type:"devices.capabilities.segment_color_setting",instance:"segmentedColorRgb",
+      parameters:{fields:[{fieldName:"segment",size:{min:1,max:segs},elementRange:{min:0,max:segs-1}},{fieldName:"rgb"}]}});
     return { sku, device:"MOCK:"+name.replace(/\W+/g,""), deviceName:name, room,
       type:"devices.types.light", online,
       _state:{ on, brightness:bri, color:rgbToInt(...rgb) },
-      capabilities:[
-        {type:"devices.capabilities.on_off",instance:"powerSwitch"},
-        {type:"devices.capabilities.range",instance:"brightness",parameters:{range:{min:1,max:100}}},
-        {type:"devices.capabilities.color_setting",instance:"colorRgb"},
-      ]};
+      capabilities:caps};
   }
   const wait = ms => new Promise(r=>setTimeout(r,ms));
 
@@ -304,6 +318,7 @@ const Govee = (() => {
     if(instance==="brightness")  d._state.brightness = value;
     if(instance==="colorRgb")    d._state.color = value;
     if(instance==="colorTemperatureK"){ d._state.colorTemp = value; d._state.color = kelvinToRgb(value); }
+    // segment colors are tracked in the UI (_segColors); mock just accepts the command
     return { ok:true };
   }
 
@@ -333,6 +348,7 @@ const Govee = (() => {
     setBright:(id,v)   => (M?mockControl:liveControl)(id,"devices.capabilities.range","brightness",v),
     setColor:(id,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorRgb",rgbInt),
     setColorTemp:(id,k) =>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorTemperatureK",k),
+    setSegmentColor:(id,segs,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.segment_color_setting","segmentedColorRgb",{segment:segs,rgb:rgbInt}),
   };
 })();
 
@@ -583,21 +599,42 @@ function openLight(id){
   ov.dataset.dev=id; renderLightDetail(); ov.style.display="flex";
 }
 function closeLight(){ const ov=document.getElementById("liteOverlay"); if(ov) ov.style.display="none"; }
+// does this device expose addressable segments? (RGBIC strips) + how many
+function segInfo(d){
+  const cap=(d.capabilities||[]).find(c=>c.type==="devices.capabilities.segment_color_setting");
+  if(!cap) return {supported:false,count:0};
+  let count=0;
+  try{ const f=(cap.parameters?.fields||[]).find(x=>/segment/i.test(x.fieldName||""));
+    count=(f?.size?.max) || (f?.elementRange?.max!=null ? f.elementRange.max+1 : 0); }catch{}
+  return {supported:true, count: count||15};
+}
 function renderLightDetail(){
   const ov=document.getElementById("liteOverlay"); if(!ov) return;
   const d=byId(ov.dataset.dev); const card=document.getElementById("liteCard"); if(!d) return;
-  const on=d._state.on&&d.online, bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;
+  const seg=segInfo(d);
+  const tab=(ov.dataset.tab==="sub" && seg.supported) ? "sub" : "whole";
+  const on=d._state.on&&d.online;
   card.style.cssText="width:min(540px,100%);box-sizing:border-box;--cardc:"+cssRgb(d._state.color)+";background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:18px 18px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto;box-shadow:0 -12px 40px rgba(0,0,0,.28)";
-  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-ldcol="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
-  const whites = WHITES.map(([n,k])=>`<button class="ld-white" data-ldwhite="${k}">${n}</button>`).join("");
-  card.innerHTML=`
-    <div class="ld-head">
+  const head=`<div class="ld-head">
       <span class="litedot" style="--litec:${cssRgb(d._state.color)};width:15px;height:15px"></span>
       <div style="flex:1;min-width:0"><div class="ld-name">${d.deviceName}</div>
         <div class="ld-sub">${d.online?d.sku:'Offline · '+d.sku}</div></div>
       <div class="sw ${on?'lon':''}" data-pwr="${d.device}"><span class="knob"></span></div>
-      <button class="ld-x" data-ldclose aria-label="Close">✕</button>
-    </div>
+      <button class="ld-x" data-ldclose aria-label="Close">✕</button></div>`;
+  const tabs = seg.supported
+    ? `<div class="ld-tabs"><button class="ld-tab ${tab==='whole'?'sel':''}" data-ldtab="whole">Whole</button><button class="ld-tab ${tab==='sub'?'sel':''}" data-ldtab="sub">Subsection</button></div>` : "";
+  card.innerHTML = head + tabs + (tab==="sub" ? subBody(d,seg) : wholeBody(d));
+  const q=s=>card.querySelector(s);
+  q("[data-ldclose]").onclick=closeLight;
+  q("[data-pwr]").onclick=()=>{ if(!d.online) return toast("Light is offline",true); const nx=!d._state.on; d._state.on=nx; Govee.setPower(d.device,nx).catch(()=>{}); render(); renderLightDetail(); };
+  card.querySelectorAll("[data-ldtab]").forEach(b=>b.onclick=()=>{ ov.dataset.tab=b.dataset.ldtab; renderLightDetail(); });
+  if(tab==="sub") attachSub(card,d,seg); else attachWhole(card,d);
+}
+function wholeBody(d){
+  const bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;
+  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-ldcol="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
+  const whites = WHITES.map(([n,k])=>`<button class="ld-white" data-ldwhite="${k}">${n}</button>`).join("");
+  return `
     <div class="ld-sec"><div class="ld-lbl"><span>Brightness</span><span data-ldbrival>${bri}%</span></div>
       <input type="range" min="1" max="100" value="${bri}" data-ldbri ${d.online?'':'disabled'} style="--p:${bri}%"></div>
     <div class="ld-sec"><div class="ld-lbl"><span>Color</span></div>
@@ -608,15 +645,39 @@ function renderLightDetail(){
       <input type="range" class="tempbar" min="2000" max="9000" step="100" value="${temp}" data-ldtemp ${d.online?'':'disabled'}>
       <div class="ld-whites">${whites}</div>
     </div>`;
+}
+function attachWhole(card,d){
   const q=s=>card.querySelector(s);
-  q("[data-ldclose]").onclick=closeLight;
-  q("[data-pwr]").onclick=()=>{ if(!d.online) return toast("Light is offline",true); const nx=!d._state.on; d._state.on=nx; Govee.setPower(d.device,nx).catch(()=>{}); render(); renderLightDetail(); };
   const bel=q("[data-ldbri]"); bel.oninput=()=>{ const v=+bel.value; d._state.brightness=v; bel.style.setProperty("--p",v+"%"); q("[data-ldbrival]").textContent=v+"%"; clearTimeout(d._ldb); d._ldb=setTimeout(()=>Govee.setBright(d.device,v).catch(()=>{}),220); };
   const hel=q("[data-ldhue]"); hel.oninput=()=>{ const v=hueToRgb(+hel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldh); d._ldh=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); },180); };
   const pel=q("[data-ldpick]"); pel.oninput=()=>{ const v=hexInt(pel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldp); d._ldp=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); },180); };
   const tel=q("[data-ldtemp]"); tel.oninput=()=>{ const v=+tel.value; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); q("[data-ldtempval]").textContent=v+"K"; clearTimeout(d._ldt); d._ldt=setTimeout(()=>{ Govee.setColorTemp(d.device,v).catch(()=>{}); render(); },220); };
   card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
   card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); Govee.setColorTemp(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
+}
+// Subsection: paint individual segments of an RGBIC strip
+function subBody(d,seg){
+  if(!Array.isArray(d._segColors) || d._segColors.length!==seg.count)
+    d._segColors = Array.from({length:seg.count}, (_,i)=> (d._segColors&&d._segColors[i]) ?? d._state.color);
+  const paint = +(document.getElementById("liteOverlay").dataset.paint || d._state.color);
+  const sw = MORECOLORS.map(hex=>{ const v=hexInt(hex); return `<button class="ld-sw ${v===paint?'psel':''}" data-ldpaint="${v}" style="background:${hex}"></button>`; }).join("");
+  const cells = d._segColors.map((c,i)=>`<button class="seg-cell" data-seg="${i}" style="background:${cssRgb(c)}" title="Segment ${i+1}"></button>`).join("");
+  return `
+    <p style="margin:2px 2px 4px;color:var(--ink-faint);font-size:12.5px">Pick a paint color, then tap segments to color sections of the strip.</p>
+    <div class="ld-sec"><div class="ld-lbl"><span>Paint color</span></div>
+      <div class="ld-sws">${sw}<input type="color" class="swatch picker" value="${rgbHex(paint)}" data-ldpaintpick title="Custom paint color"></div></div>
+    <div class="ld-sec"><div class="ld-lbl"><span>Segments (${seg.count})</span><button class="ld-fill" data-segfill>Fill all</button></div>
+      <div class="segstrip">${cells}</div></div>`;
+}
+function attachSub(card,d,seg){
+  const ov=document.getElementById("liteOverlay");
+  const paint=()=>+(ov.dataset.paint || d._state.color);
+  card.querySelectorAll("[data-ldpaint]").forEach(b=>b.onclick=()=>{ ov.dataset.paint=b.dataset.ldpaint; renderLightDetail(); });
+  const pp=card.querySelector("[data-ldpaintpick]"); if(pp) pp.oninput=()=>{ ov.dataset.paint=String(hexInt(pp.value)); renderLightDetail(); };
+  card.querySelectorAll("[data-seg]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
+    const i=+b.dataset.seg, v=paint(); d._segColors[i]=v; b.style.background=cssRgb(v); Govee.setSegmentColor(d.device,[i],v).catch(()=>{}); });
+  const fill=card.querySelector("[data-segfill]"); if(fill) fill.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
+    const v=paint(); d._segColors=d._segColors.map(()=>v); Govee.setSegmentColor(d.device, d._segColors.map((_,i)=>i), v).catch(()=>{}); renderLightDetail(); };
 }
 
 /* ============================================================

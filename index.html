@@ -196,6 +196,14 @@
     font:600 14px 'Inter',system-ui; padding:11px; border-radius:5px; cursor:pointer}
   .ld-act:active{transform:scale(.97)}
   .ld-act:disabled{opacity:.4; cursor:not-allowed}
+  .ld-hdr{font-size:11.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--ink-faint);
+    margin:22px 0 2px; padding-top:16px; border-top:1px solid var(--line)}
+  .ld-dim{color:var(--ink-faint); font-size:13px; margin-top:8px}
+  .scenechips{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+  .scenechip{border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink);
+    font:600 13px 'Inter',system-ui; padding:8px 13px; border-radius:5px; cursor:pointer}
+  .scenechip:active{transform:scale(.96)}
+  .scenechip:disabled{opacity:.4; cursor:not-allowed}
   /* ---------- snapshots strip ---------- */
   .snaps{flex:0 0 auto; display:flex; align-items:center; gap:8px; overflow-x:auto; padding:11px 16px;
     border-bottom:1px solid var(--line); background:var(--surface)}
@@ -369,6 +377,10 @@ const Govee = (() => {
     setColorTemp:(id,k) =>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorTemperatureK",k),
     setSegmentColor:(id,segs,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.segment_color_setting","segmentedColorRgb",{segment:segs,rgb:rgbInt}),
     flash:(id,cols,times)=> M ? mockFlash() : call("/govee/flash",{device:id,cols,times}),
+    listScenes: async (id)=> M
+      ? ["Sunrise","Aurora","Rainbow","Sunset","Forest","Ocean","Candlelight","Party","Fire","Night","Nebula","Spring"].map((n,i)=>({name:n,value:{id:i},instance:"lightScene"}))
+      : ((await call("/govee/scenes",{device:id})).data || []),
+    applyBuiltin:(id,value,instance)=> M ? mockFlash() : call("/govee/scene/builtin",{device:id,value,instance}),
   };
 })();
 
@@ -652,6 +664,9 @@ function openLight(id){
     ov.addEventListener("click",e=>{ if(e.target===ov) ov.style.display="none"; });
   }
   ov.dataset.dev=id; renderLightDetail(); ov.style.display="flex";
+  const d=byId(id);
+  if(d && d._scenes===undefined){ d._scenes=null;   // fetch this strip's built-in scenes once
+    Govee.listScenes(id).then(sc=>{ d._scenes=sc||[]; renderLightDetail(); }).catch(()=>{ d._scenes=[]; renderLightDetail(); }); }
 }
 function closeLight(){ const ov=document.getElementById("liteOverlay"); if(ov) ov.style.display="none"; }
 // does this device expose addressable segments? (RGBIC strips) + how many
@@ -667,7 +682,6 @@ function renderLightDetail(){
   const ov=document.getElementById("liteOverlay"); if(!ov) return;
   const d=byId(ov.dataset.dev); const card=document.getElementById("liteCard"); if(!d) return;
   const seg=segInfo(d);
-  const tab=(ov.dataset.tab==="sub" && seg.supported) ? "sub" : "whole";
   const on=d._state.on&&d.online;
   card.style.cssText="width:min(540px,100%);box-sizing:border-box;--cardc:"+cssRgb(d._state.color)+";background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px 10px 0 0;padding:18px 18px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto;box-shadow:0 -12px 40px rgba(0,0,0,.28)";
   const head=`<div class="ld-head">
@@ -676,14 +690,21 @@ function renderLightDetail(){
         <div class="ld-sub">${d.online?d.sku:'Offline · '+d.sku}</div></div>
       <div class="sw ${on?'lon':''}" data-pwr="${d.device}"><span class="knob"></span></div>
       <button class="ld-x" data-ldclose aria-label="Close">✕</button></div>`;
-  const tabs = seg.supported
-    ? `<div class="ld-tabs"><button class="ld-tab ${tab==='whole'?'sel':''}" data-ldtab="whole">Whole</button><button class="ld-tab ${tab==='sub'?'sel':''}" data-ldtab="sub">Subsection</button></div>` : "";
-  card.innerHTML = head + tabs + (tab==="sub" ? subBody(d,seg) : wholeBody(d));
+  // one scrollable panel: everything about this strand in labeled sections
+  const segSection = seg.supported ? `<div class="ld-hdr">Sections of this strip</div>` + subBody(d,seg) : "";
+  const sc = d._scenes;
+  const sceneSection = `<div class="ld-hdr">Scenes</div>` + (
+    (sc==null) ? `<div class="ld-dim">Loading scenes…</div>`
+    : (sc.length ? `<div class="scenechips">`+sc.map((s,i)=>`<button class="scenechip" data-ldscene="${i}" ${d.online?'':'disabled'}>${s.name}</button>`).join("")+`</div>`
+       : `<div class="ld-dim">No built-in scenes for this light.</div>`) );
+  card.innerHTML = head + wholeBody(d) + segSection + sceneSection;
   const q=s=>card.querySelector(s);
   q("[data-ldclose]").onclick=closeLight;
   q("[data-pwr]").onclick=()=>{ if(!d.online) return toast("Light is offline",true); const nx=!d._state.on; d._state.on=nx; Govee.setPower(d.device,nx).catch(()=>{}); render(); renderLightDetail(); };
-  card.querySelectorAll("[data-ldtab]").forEach(b=>b.onclick=()=>{ ov.dataset.tab=b.dataset.ldtab; renderLightDetail(); });
-  if(tab==="sub") attachSub(card,d,seg); else attachWhole(card,d);
+  attachWhole(card,d);
+  if(seg.supported) attachSub(card,d,seg);
+  card.querySelectorAll("[data-ldscene]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
+    const s=(d._scenes||[])[+b.dataset.ldscene]; if(!s) return; Govee.applyBuiltin(d.device,s.value,s.instance).catch(()=>{}); toast("Scene: "+s.name); });
 }
 function wholeBody(d){
   const bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;
@@ -724,10 +745,9 @@ function subBody(d,seg){
   const sw = MORECOLORS.map(hex=>{ const v=hexInt(hex); return `<button class="ld-sw ${v===paint?'psel':''}" data-ldpaint="${v}" style="background:${hex}"></button>`; }).join("");
   const cells = d._segColors.map((c,i)=>`<button class="seg-cell" data-seg="${i}" style="background:${cssRgb(c)}" title="Segment ${i+1}"></button>`).join("");
   return `
-    <p style="margin:2px 2px 4px;color:var(--ink-faint);font-size:12.5px">Pick a paint color, then tap segments to color sections of the strip.</p>
-    <div class="ld-sec"><div class="ld-lbl"><span>Paint color</span></div>
+    <div class="ld-sec"><div class="ld-lbl"><span>Paint color — then tap a segment</span></div>
       <div class="ld-sws">${sw}<input type="color" class="swatch picker" value="${rgbHex(paint)}" data-ldpaintpick title="Custom paint color"></div></div>
-    <div class="ld-sec"><div class="ld-lbl"><span>Segments (${seg.count})</span><button class="ld-fill" data-segfill>Fill all</button></div>
+    <div class="ld-sec"><div class="ld-lbl"><span>${seg.count} segments</span><button class="ld-fill" data-segfill>Fill all</button></div>
       <div class="segstrip">${cells}</div></div>`;
 }
 function attachSub(card,d,seg){

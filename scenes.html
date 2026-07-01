@@ -88,6 +88,13 @@
     opacity:0; transition:opacity .22s, transform .22s; pointer-events:none; z-index:60; max-width:88vw; box-shadow:0 12px 40px -10px rgba(0,0,0,.4)}
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
   #toast.err{background:var(--off); color:#fff}
+  /* range sliders: proper track + fill (fixes the padded-box look / fill not reaching 100%) */
+  input[type=range]{-webkit-appearance:none; appearance:none; padding:0; border:0; height:7px; border-radius:3px; cursor:pointer; background:var(--line-strong)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px;height:20px;border-radius:3px; background:#fff; border:none; box-shadow:0 1px 5px rgba(0,0,0,.3), 0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:3px;background:#fff;border:none}
+  input[type=range].fillbar{background:linear-gradient(90deg,var(--accent) var(--p,100%),var(--line-strong) var(--p,100%))}
+  #gmic.listening{color:#fff !important; background:var(--off) !important; border-color:var(--off) !important; animation:micpulse 1s ease-in-out infinite}
+  @keyframes micpulse{0%,100%{opacity:1}50%{opacity:.55}}
 </style>
 </head>
 <body>
@@ -105,7 +112,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:180px">
         <span style="font-size:12px;color:var(--dim);white-space:nowrap">Brightness</span>
-        <input type="range" id="gbright" min="1" max="100" value="100" style="flex:1">
+        <input type="range" id="gbright" class="fillbar" min="1" max="100" value="100" style="flex:1;--p:100%">
         <span id="gbrightval" style="font-size:12px;color:var(--ink);font-weight:600;min-width:36px;text-align:right">100%</span>
       </div>
     </div>
@@ -114,6 +121,7 @@
     <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
     <div class="row" style="margin-top:9px">
       <button id="ggen" class="btn blue">✨ Generate scene</button>
+      <button id="gmic" class="btn" title="Speak your scene">🎤 Speak</button>
       <span style="font-size:12px;color:var(--ink-faint)">or press Enter</span>
     </div>
     <div id="gchips" class="row" style="margin-top:9px"></div>
@@ -623,8 +631,25 @@ renderLibFilter(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); rende
 $("#gtarget").onchange=()=>{ sceneTarget=$("#gtarget").value;
   if(lastScene){ lastScene.targets=currentTargets(); renderPreview(lastScene); }
   const opt=$("#gtarget").selectedOptions[0]; msg("Scenes apply to: "+(opt?opt.textContent:"All lights")); };
-$("#gbright").oninput=()=>{ const v=+$("#gbright").value; $("#gbrightval").textContent=v+"%";
+$("#gbright").oninput=()=>{ const v=+$("#gbright").value; $("#gbrightval").textContent=v+"%"; $("#gbright").style.setProperty("--p",v+"%");
   clearTimeout(window._gbt); window._gbt=setTimeout(()=>setBrightFor(v),260); };
+/* ---------- voice typing for the scene prompt (Web Speech API) ---------- */
+(function(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mic = $("#gmic"); if(!mic) return;
+  if(!SR){ mic.style.display="none"; return; }   // browser doesn't support it
+  let rec=null, listening=false;
+  mic.onclick=()=>{
+    if(listening){ try{ rec.stop(); }catch{} return; }
+    rec=new SR(); rec.lang="en-US"; rec.interimResults=true; rec.continuous=false;
+    const base = $("#gp").value ? $("#gp").value.trim()+" " : "";
+    rec.onstart=()=>{ listening=true; mic.classList.add("listening"); mic.textContent="● Listening"; toast("Listening… speak your scene"); };
+    rec.onresult=(e)=>{ let t=""; for(let i=e.resultIndex;i<e.results.length;i++) t+=e.results[i][0].transcript; $("#gp").value=base+t; };
+    rec.onerror=(e)=>{ toast("Mic: "+(e.error==="not-allowed"?"allow microphone access":e.error||"error"), true); };
+    rec.onend=()=>{ listening=false; mic.classList.remove("listening"); mic.textContent="🎤 Speak"; };
+    try{ rec.start(); }catch{ toast("Couldn't start the mic", true); }
+  };
+})();
 (async()=>{
   await loadDevices(); renderBuiltin(); renderTargets();
   if(!CONFIG.USE_MOCK){ TRIGGERS = await trigGet(); renderTriggers(); }

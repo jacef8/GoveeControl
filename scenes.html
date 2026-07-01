@@ -579,7 +579,15 @@ document.addEventListener("click", async e=>{
   const aud=e.target.closest("[data-audel]"); if(aud){ const id=aud.dataset.audel; await autoDel(id); await renderAuto(); msg("Automation removed"); return; }
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
-renderLibFilter(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); }); renderTeam(); renderTriggers(); renderTrigActs();
+function applyTimerHash(){
+  const m=(location.hash||"").match(/tgt=grp:([^&]+)/); if(!m) return;
+  const gid=m[1];
+  const gs=$("#gschgrp"); if(gs) gs.value=gid;                 // automation → this group
+  const ts=$("#gtarget"); if(ts){ sceneTarget="grp:"+gid; if([...ts.options].some(o=>o.value===sceneTarget)) ts.value=sceneTarget; }
+  const inp=$("#gschin"); if(inp){ inp.scrollIntoView({block:"center"}); setTimeout(()=>inp.focus(),50);
+    msg("Set a time for this group below — e.g. \"off at 11pm\""); }
+}
+renderLibFilter(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
 $("#gtarget").onchange=()=>{ sceneTarget=$("#gtarget").value;
   if(lastScene){ lastScene.targets=currentTargets(); renderPreview(lastScene); }
   const opt=$("#gtarget").selectedOptions[0]; msg("Scenes apply to: "+(opt?opt.textContent:"All lights")); };

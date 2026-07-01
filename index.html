@@ -156,6 +156,9 @@
   .tctrl{display:flex; align-items:center; gap:13px; flex-wrap:wrap}
   .tctrl input[type=range]{flex:1; min-width:120px; height:7px}
   .tswatch{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+  .bicon{flex:0 0 auto; color:var(--ink-faint); font-size:15px; line-height:1}
+  .ticon{flex:0 0 auto; color:var(--ink-faint); font-size:17px; text-decoration:none; padding:3px 6px; border-radius:5px}
+  .ticon:hover{background:var(--surface-2); color:var(--ink)}
   /* light chips inside a tile */
   .lites{display:grid; grid-template-columns:1fr; gap:10px}
   @media (min-width:520px){ .tile.wide .lites{grid-template-columns:1fr 1fr} }
@@ -453,12 +456,16 @@ function render(){
     const wide = list.length>=3;
     const presets = PRESETS.map(([hex,r,g,b])=>
       `<span class="swatch" style="background:${hex}" data-grpcolor="${Govee.rgbToInt(r,g,b)}" data-grp="${name}"></span>`).join("");
+    const gid = (GROUPS.find(g=>g.name===name)||{}).id;
+    const timerLink = gid ? `<a class="ticon" href="scenes.html#tgt=grp:${gid}" title="Set a timer for ${name}">⏱</a>` : "";
     tiles += `<div class="tile ${wide?'wide':''}">
         <div class="thead">
           <span class="tname">${name} <span class="tcount">${onCount}/${list.length} on</span></span>
+          ${timerLink}
           <div class="gsw ${anyOn?'on':''}" data-grptoggle="${name}" role="switch" aria-checked="${anyOn}"><span class="gk"></span></div>
         </div>
         <div class="tctrl">
+          <span class="bicon" title="Brightness">☀</span>
           <input type="range" min="1" max="100" value="${avg}" data-grpbri="${name}" style="--p:${avg}%">
           <span class="tswatch">${presets}<input type="color" class="swatch picker" data-grppick="${name}" value="#ffffff" title="Custom color for ${name}"></span>
         </div>
@@ -485,6 +492,7 @@ function liteHTML(d){
       <div class="sw" data-pwr="${d.device}" role="switch" aria-checked="${on}"><span class="knob"></span></div>
     </div>
     <div class="literow2">
+      <span class="bicon" title="Brightness">☀</span>
       <input type="range" min="1" max="100" value="${bri}" data-bri="${d.device}" style="--p:${bri}%" ${d.online?'':'disabled'}>
       <input type="color" class="swatch picker" value="${rgbHex(d._state.color)}" data-pick="${d.device}" title="Color" ${d.online?'':'disabled'}>
     </div>
@@ -755,8 +763,22 @@ function attachSub(card,d,seg){
   const paint=()=>+(ov.dataset.paint || d._state.color);
   card.querySelectorAll("[data-ldpaint]").forEach(b=>b.onclick=()=>{ ov.dataset.paint=b.dataset.ldpaint; renderLightDetail(); });
   const pp=card.querySelector("[data-ldpaintpick]"); if(pp) pp.oninput=()=>{ ov.dataset.paint=String(hexInt(pp.value)); renderLightDetail(); };
-  card.querySelectorAll("[data-seg]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
-    const i=+b.dataset.seg, v=paint(); d._segColors[i]=v; b.style.background=cssRgb(v); Govee.setSegmentColor(d.device,[i],v).catch(()=>{}); });
+  // tap OR drag across segments to paint; whole stroke sends one API call
+  const strip=card.querySelector(".segstrip");
+  if(strip){
+    strip.style.touchAction="none";
+    let painting=false; const dragged=new Set();
+    const mark=(x,y)=>{ const el=document.elementFromPoint(x,y); const cell=el&&el.closest&&el.closest("[data-seg]");
+      if(!cell || !strip.contains(cell)) return; const i=+cell.dataset.seg, v=paint();
+      if(d._segColors[i]!==v){ d._segColors[i]=v; cell.style.background=cssRgb(v); } dragged.add(i); };
+    strip.addEventListener("pointerdown", e=>{ if(!d.online) return toast("Light is offline",true);
+      painting=true; dragged.clear(); try{ strip.setPointerCapture(e.pointerId); }catch{} mark(e.clientX,e.clientY); });
+    strip.addEventListener("pointermove", e=>{ if(painting) mark(e.clientX,e.clientY); });
+    const commit=()=>{ if(!painting) return; painting=false;
+      if(dragged.size && d.online) Govee.setSegmentColor(d.device,[...dragged],paint()).catch(()=>{}); dragged.clear(); };
+    strip.addEventListener("pointerup", commit);
+    strip.addEventListener("pointercancel", commit);
+  }
   const fill=card.querySelector("[data-segfill]"); if(fill) fill.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
     const v=paint(); d._segColors=d._segColors.map(()=>v); Govee.setSegmentColor(d.device, d._segColors.map((_,i)=>i), v).catch(()=>{}); renderLightDetail(); };
 }

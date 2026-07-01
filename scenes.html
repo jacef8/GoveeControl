@@ -356,13 +356,36 @@ async function activateBuiltin(s){
     body:JSON.stringify({device, value:s.value, instance:s.instance})})));
   return true;
 }
+// The Cloud API gives built-in scenes as name+id only (no colors), so we infer a
+// representative palette from the scene's name to make each tile look distinct.
+const THEME_PALETTES = [
+  [["firework","fire","flame","ember","lava"], ["#ff3b00","#ff8c00","#ffd000","#ff2d00"]],
+  [["valentine","love","heart","romantic","romance"], ["#ff2d6a","#ff7aa8","#ffd0e0","#d4537e"]],
+  [["party","carnival","dance","disco","colorful","celebrat","festiv","candy","sport"], ["#ff2d92","#00c7be","#ffd166","#5e8bff","#af52de"]],
+  [["candle","warm","dine","dinner","leisure","cozy","cabin"], ["#ff7a1e","#ff9d3c","#ffcf87","#e0531d"]],
+  [["forest","spring","refresh","nature","leaf","green","meadow","jungle"], ["#0f6e2e","#39a845","#8bd450","#1d9e75"]],
+  [["deep sea","undersea","ocean","sea","aqua","water","lake","marine","dive"], ["#062a4a","#0b4f9e","#1d9e75","#0a1e5e"]],
+  [["aurora","nebula","galaxy","star","universe","cosmic","milky","meteor"], ["#5e2ea8","#2e6be6","#00c7be","#af52de"]],
+  [["sunrise","morning","dawn"], ["#ff9d5c","#ffd08a","#ffe9b0","#8ec9ff"]],
+  [["sunset","dusk","afternoon","twilight","evening"], ["#ff5e62","#ff9966","#ffcf87","#9b5de5"]],
+  [["snow","winter","ice","frost","cold"], ["#bfe6ff","#7fbfff","#ffffff","#5e8bff"]],
+  [["night","midnight","dark","sleep","moon"], ["#0a1e5e","#123a7a","#1d9e75","#062038"]],
+  [["white","bright","daylight","clean"], ["#e8f0ff","#cfe0ff","#ffffff","#dfe8ff"]],
+  [["rainbow","spectrum","gradient","flow","spin","swing","fluctuat","stack"], ["#ff3b30","#ff9500","#ffd60a","#34c759","#0a84ff","#bf5af2"]],
+];
+function hashHue(str){ let h=0; for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))>>>0; return h%360; }
+function paletteFromName(name){
+  const n=(name||"").toLowerCase();
+  for(const [keys,pal] of THEME_PALETTES){ if(keys.some(k=>n.includes(k))) return pal; }
+  const b=hashHue(n); return [0,70,150,230].map(o=>`hsl(${(b+o)%360} 78% 56%)`);
+}
 let BUILTIN = [];
 async function renderBuiltin(){
   try{ BUILTIN = await getBuiltinScenes(); }catch{ BUILTIN = []; }
   const el = $("#gbuiltin");
   if(!BUILTIN.length){ el.innerHTML = '<div style="color:var(--dim);font-size:13px;padding:4px 2px">No built-in scenes found yet — they load once your lights are connected.</div>'; return; }
   el.innerHTML = BUILTIN.map((s,i)=>`<div class="card scell" data-bi="${i}">
-    <div class="bar" style="background:linear-gradient(90deg,#3a2f5e,#1d9e75,#185fa5,#993c1d)"></div>
+    <div class="bar" style="background:linear-gradient(90deg,${paletteFromName(s.name).join(",")})"></div>
     <div style="font-weight:800;font-size:14px;margin-top:8px">${s.name}</div>
     <div style="font-size:11px;color:var(--dim);margin-top:2px">built-in · smooth</div></div>`).join("");
 }

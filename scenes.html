@@ -95,76 +95,97 @@
   input[type=range].fillbar{background:linear-gradient(90deg,var(--accent) var(--p,100%),var(--line-strong) var(--p,100%))}
   #gmic.listening{color:#fff !important; background:var(--off) !important; border-color:var(--off) !important; animation:micpulse 1s ease-in-out infinite}
   @keyframes micpulse{0%,100%{opacity:1}50%{opacity:.55}}
+  /* top-level tabs */
+  .subtabs{flex:0 0 auto; display:flex; background:var(--surface); border-bottom:1px solid var(--line); padding:0 6px}
+  .stab{flex:1; appearance:none; border:0; background:transparent; color:var(--ink-2); font:600 14.5px 'Inter',system-ui;
+    padding:13px 6px; cursor:pointer; text-decoration:none; text-align:center; border-bottom:2px solid transparent}
+  .stab.active{color:var(--accent); border-bottom-color:var(--accent)}
+  .stab:active{background:var(--surface-2)}
+  .tabpanel[hidden]{display:none}
 </style>
 </head>
 <body>
   <header>
-    <h1><span class="logo"></span> Scenes</h1>
-    <a class="tab" href="index.html">Lights</a>
-    <span class="tab active">Scenes</span>
+    <h1><span class="logo"></span> Govee</h1>
   </header>
+  <nav class="subtabs">
+    <a class="stab" href="index.html">Lights</a>
+    <button class="stab active" data-tab="scenes">Scenes</button>
+    <button class="stab" data-tab="timers">Timers</button>
+    <button class="stab" data-tab="triggers">Triggers</button>
+  </nav>
 
   <main>
-    <div class="card" style="position:sticky;top:0;z-index:5;margin-top:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 6px 16px -10px rgba(0,0,0,.4)">
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:170px">
-        <span style="font-size:13px;font-weight:800;white-space:nowrap">Apply to</span>
-        <select id="gtarget" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
+    <!-- ============ SCENES ============ -->
+    <section id="tab-scenes" class="tabpanel">
+      <div class="card" style="position:sticky;top:0;z-index:5;margin-top:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 6px 16px -10px rgba(0,0,0,.4)">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:170px">
+          <span style="font-size:13px;font-weight:800;white-space:nowrap">Apply to</span>
+          <select id="gtarget" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:180px">
+          <span style="font-size:12px;color:var(--dim);white-space:nowrap">Brightness</span>
+          <input type="range" id="gbright" class="fillbar" min="1" max="100" value="100" style="flex:1;--p:100%">
+          <span id="gbrightval" style="font-size:12px;color:var(--ink);font-weight:600;min-width:36px;text-align:right">100%</span>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:180px">
-        <span style="font-size:12px;color:var(--dim);white-space:nowrap">Brightness</span>
-        <input type="range" id="gbright" class="fillbar" min="1" max="100" value="100" style="flex:1;--p:100%">
-        <span id="gbrightval" style="font-size:12px;color:var(--ink);font-weight:600;min-width:36px;text-align:right">100%</span>
+
+      <div class="sttl">Describe a scene</div>
+      <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
+      <div class="row" style="margin-top:9px">
+        <button id="ggen" class="btn blue">✨ Generate scene</button>
+        <button id="gmic" class="btn" title="Speak your scene">🎤 Speak</button>
+        <span style="font-size:12px;color:var(--ink-faint)">or press Enter</span>
       </div>
-    </div>
+      <div id="gchips" class="row" style="margin-top:9px"></div>
+      <div id="gpreview" style="margin-top:13px"></div>
 
-    <div class="sttl">Describe a scene</div>
-    <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
-    <div class="row" style="margin-top:9px">
-      <button id="ggen" class="btn blue">✨ Generate scene</button>
-      <button id="gmic" class="btn" title="Speak your scene">🎤 Speak</button>
-      <span style="font-size:12px;color:var(--ink-faint)">or press Enter</span>
-    </div>
-    <div id="gchips" class="row" style="margin-top:9px"></div>
-    <div id="gpreview" style="margin-top:13px"></div>
+      <div class="sttl">Scene library</div>
+      <div id="glibfilter" class="row" style="margin-bottom:11px"></div>
+      <div id="glibrary" class="saved"></div>
 
-    <div class="sttl">Scene library</div>
-    <div id="glibfilter" class="row" style="margin-bottom:11px"></div>
-    <div id="glibrary" class="saved"></div>
+      <div class="sttl">Device scenes <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· built into your lights</span></div>
+      <div id="gbuiltin" class="saved"></div>
 
-    <div class="sttl">Device scenes <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· built into your lights</span></div>
-    <div id="gbuiltin" class="saved"></div>
+      <div class="sttl">Saved scenes</div>
+      <div id="gsaved" class="saved"></div>
+    </section>
 
-    <div class="sttl">Saved scenes</div>
-    <div id="gsaved" class="saved"></div>
+    <!-- ============ TIMERS ============ -->
+    <section id="tab-timers" class="tabpanel" hidden>
+      <div class="sttl">Timers</div>
+      <div style="font-size:13px;color:var(--dim);margin:0 2px 12px;line-height:1.5">Schedule your lights by time — e.g. <b>"off at 11pm"</b>, <b>"on at sunset"</b>, <b>"60% at 6:30am"</b>. These run on the server even when the app is closed. Pick which lights with the dropdown.</div>
+      <div id="gauto"></div>
+      <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap">
+        <input id="gschin" placeholder="off at 11pm" style="flex:1; min-width:150px" />
+        <select id="gschgrp" title="Which lights" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px"></select>
+        <button id="gschadd" class="btn">Add</button>
+      </div>
+    </section>
 
-    <div class="sttl">Automations</div>
-    <div id="gauto"></div>
-    <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap">
-      <input id="gschin" placeholder="off at 11pm" style="flex:1; min-width:150px" />
-      <select id="gschgrp" title="Which lights" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px"></select>
-      <button id="gschadd" class="btn">Add</button>
-    </div>
-
-    <div class="sttl">Event triggers <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· IFTTT</span></div>
-    <div style="font-size:13px;color:var(--dim);margin:0 2px 11px;line-height:1.5">
-      In IFTTT: <b>IF</b> a game score, time, or any event happens → <b>THEN</b> Webhooks: make a web request to the URL below.
-      Each event name maps to a light action here.</div>
-    <div class="card" style="margin-bottom:11px">
-      <div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Your webhook URL</div>
-      <code id="ghookurl" style="font-size:12px;color:#9bb4ff;word-break:break-all"></code>
-      <div style="font-size:11px;color:#6f7ea3;margin-top:6px">Replace the last part with any event name you map below.</div>
-    </div>
-    <div class="card" style="margin-bottom:11px;display:flex;align-items:center;gap:10px">
-      <div style="font-size:13px;font-weight:800">Team colors</div>
-      <select id="gteam" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
-      <span id="gteamsw"></span>
-    </div>
-    <div id="gtrig"></div>
-    <div class="row" style="margin-top:10px;flex-wrap:nowrap">
-      <input id="gtrigev" placeholder="touchdown" style="flex:1.3" />
-      <select id="gtrigact" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:9px 10px"></select>
-      <button id="gtrigadd" class="btn">Add</button>
-    </div>
+    <!-- ============ TRIGGERS ============ -->
+    <section id="tab-triggers" class="tabpanel" hidden>
+      <div class="sttl">Triggers <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· if-this-then-that (IFTTT)</span></div>
+      <div style="font-size:13px;color:var(--dim);margin:0 2px 11px;line-height:1.5">
+        In IFTTT: <b>IF</b> a game score, time, or any event happens → <b>THEN</b> Webhooks: make a web request to the URL below.
+        Each event name maps to a light action here.</div>
+      <div class="card" style="margin-bottom:11px">
+        <div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Your webhook URL</div>
+        <code id="ghookurl" style="font-size:12px;color:#9bb4ff;word-break:break-all"></code>
+        <div style="font-size:11px;color:#6f7ea3;margin-top:6px">Replace the last part with any event name you map below.</div>
+      </div>
+      <div class="card" style="margin-bottom:11px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:13px;font-weight:800">Team colors</div>
+        <select id="gteam" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
+        <span id="gteamsw"></span>
+      </div>
+      <div id="gtrig"></div>
+      <div class="row" style="margin-top:10px;flex-wrap:nowrap">
+        <input id="gtrigev" placeholder="touchdown" style="flex:1.3" />
+        <select id="gtrigact" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:9px 10px"></select>
+        <button id="gtrigadd" class="btn">Add</button>
+      </div>
+    </section>
   </main>
 
   <footer><span id="gmsg">Type a vibe and Generate — the real app sends this to Claude.</span>
@@ -621,12 +642,22 @@ document.addEventListener("click", async e=>{
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
 function applyTimerHash(){
   const m=(location.hash||"").match(/tgt=grp:([^&]+)/); if(!m) return;
+  if(typeof showTab==="function") showTab("timers");
   const gid=m[1];
   const gs=$("#gschgrp"); if(gs) gs.value=gid;                 // automation → this group
   const ts=$("#gtarget"); if(ts){ sceneTarget="grp:"+gid; if([...ts.options].some(o=>o.value===sceneTarget)) ts.value=sceneTarget; }
   const inp=$("#gschin"); if(inp){ inp.scrollIntoView({block:"center"}); setTimeout(()=>inp.focus(),50);
     msg("Set a time for this group below — e.g. \"off at 11pm\""); }
 }
+/* ---------- top-level tabs (Scenes / Timers / Triggers) ---------- */
+function showTab(name){
+  if(!["scenes","timers","triggers"].includes(name)) name="scenes";
+  document.querySelectorAll(".tabpanel").forEach(p=>{ p.hidden = (p.id!=="tab-"+name); });
+  document.querySelectorAll(".stab[data-tab]").forEach(b=>b.classList.toggle("active", b.dataset.tab===name));
+  const mn=document.querySelector("main"); if(mn) mn.scrollTop=0;
+}
+document.querySelectorAll(".stab[data-tab]").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+showTab( location.hash.includes("tgt=") ? "timers" : ((location.hash.match(/#(scenes|timers|triggers)/)||[])[1] || "scenes") );
 renderLibFilter(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
 $("#gtarget").onchange=()=>{ sceneTarget=$("#gtarget").value;
   if(lastScene){ lastScene.targets=currentTargets(); renderPreview(lastScene); }

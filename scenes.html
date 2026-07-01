@@ -69,8 +69,8 @@
   .bar{height:34px; border-radius:10px; overflow:hidden}
   .pill{font-size:12px; padding:3px 10px; border-radius:4px; border:1px solid color-mix(in srgb,var(--accent) 40%,transparent); color:var(--accent); background:var(--accent-soft)}
   .arow{display:flex; align-items:center; gap:11px; border:1px solid var(--line); border-radius:6px; background:var(--surface); padding:13px 15px; margin-bottom:10px; box-shadow:var(--shadow-card)}
-  .sw{width:54px;height:32px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface-2);position:relative;cursor:pointer;flex:0 0 auto;transition:.25s}
-  .sw .k{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:4px;background:var(--ink-faint);transition:left .25s,background .25s;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .sw{width:54px;height:32px;border-radius:16px;border:1px solid var(--line-strong);background:var(--surface-2);position:relative;cursor:pointer;flex:0 0 auto;transition:.25s}
+  .sw .k{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--ink-faint);transition:left .25s,background .25s;box-shadow:0 1px 4px rgba(0,0,0,.25)}
   .sw.on{border-color:color-mix(in srgb,var(--on) 55%,transparent);background:color-mix(in srgb,var(--on) 22%,var(--surface))}
   .sw.on .k{left:27px;background:var(--on)}
   footer{flex:0 0 auto; padding:12px 18px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); font-size:13px; color:var(--ink-2); display:flex; gap:8px}
@@ -89,9 +89,9 @@
   #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
   #toast.err{background:var(--off); color:#fff}
   /* range sliders: proper track + fill (fixes the padded-box look / fill not reaching 100%) */
-  input[type=range]{-webkit-appearance:none; appearance:none; padding:0; border:0; height:7px; border-radius:3px; cursor:pointer; background:var(--line-strong)}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px;height:20px;border-radius:3px; background:#fff; border:none; box-shadow:0 1px 5px rgba(0,0,0,.3), 0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
-  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:3px;background:#fff;border:none}
+  input[type=range]{-webkit-appearance:none; appearance:none; padding:0; border:0; height:8px; border-radius:8px; cursor:pointer; background:var(--line-strong)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px;height:22px;border-radius:50%; background:#fff; border:none; box-shadow:0 1px 5px rgba(0,0,0,.3), 0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
+  input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:none}
   input[type=range].fillbar{background:linear-gradient(90deg,var(--accent) var(--p,100%),var(--line-strong) var(--p,100%))}
   #gmic.listening{color:#fff !important; background:var(--off) !important; border-color:var(--off) !important; animation:micpulse 1s ease-in-out infinite}
   @keyframes micpulse{0%,100%{opacity:1}50%{opacity:.55}}

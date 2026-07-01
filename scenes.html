@@ -305,19 +305,26 @@ function renderPreview(s){
   $("#gsave").onclick=(ev)=>{ flashEl(ev.currentTarget); addSaved(s); toast(`Saved "${s.name}"`); msg(`Saved "${s.name}"`); };
 }
 
-/* ---------- saved scenes ---------- */
+/* ---------- saved scenes (persisted to localStorage so they last) ---------- */
 let SAVED=[];
-(async()=>{ SAVED=[await designScene("cozy movie"),await designScene("party"),await designScene("ocean"),await designScene("focus")]; renderSaved(); })();
+function loadSaved(){ try{ const r=localStorage.getItem("gv_saved"); SAVED=r?JSON.parse(r):[]; }catch{ SAVED=[]; } if(!Array.isArray(SAVED)) SAVED=[]; }
+function saveSavedStore(){ try{ localStorage.setItem("gv_saved", JSON.stringify(SAVED)); }catch{} }
+loadSaved();
 function renderSaved(){
-  $("#gsaved").innerHTML = SAVED.map((s,i)=>{
+  const el=$("#gsaved"); if(!el) return;
+  if(!SAVED.length){ el.innerHTML='<div style="color:var(--dim);font-size:13px;padding:4px 2px">No saved scenes yet. Generate or pick a scene, then tap <b>Save</b> — it stays here (and in the timer &amp; trigger pickers).</div>'; return; }
+  el.innerHTML = SAVED.map((s,i)=>{
     const grad=s.cols.map(rgb).join(",");
     return `<div class="card scell" data-act="${i}">
+      <button class="ex" data-savedel="${i}" title="Delete" style="position:absolute;top:6px;right:6px;padding:2px 8px;border-color:#6e2f2f;color:#ff8a8a;z-index:2">✕</button>
       <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
       <div style="font-weight:800;font-size:14px;margin-top:8px">${s.name}</div>
       <div style="font-size:11px;color:var(--dim);margin-top:2px">${s.motion?"moving":"static"} · tap to apply</div></div>`;
   }).join("");
 }
-function addSaved(s){ if(SAVED.length>=8)SAVED.pop(); SAVED.unshift(s); renderSaved(); }
+function addSaved(s){ SAVED=SAVED.filter(x=>x.name!==s.name); SAVED.unshift(s); if(SAVED.length>12) SAVED.pop(); saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs(); }
+function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs(); }
+renderSaved();
 
 /* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
 const LIB_CATS = ["All","Party","Calm","Nature","Holiday"];
@@ -591,6 +598,7 @@ $("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team
   msg(`Team set to ${team} — new score triggers use these colors`); };
 document.addEventListener("click", async e=>{
   const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
+  const sdel=e.target.closest("[data-savedel]"); if(sdel){ e.stopPropagation(); const nm=SAVED[+sdel.dataset.savedel]?.name; delSaved(+sdel.dataset.savedel); toast(`Removed "${nm||'scene'}"`); return; }
   const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); ack(sv,`Applied "${s.name}" to ${targetLabel()}`); renderPreview(s); await applyScene(s); return; }
   const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; renderLibFilter(); renderLibrary(); return; }
   const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); ack(lb,`Applied "${p.name}" to ${targetLabel()}`); renderPreview(s); await applyScene(s); return; }

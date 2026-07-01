@@ -27,6 +27,12 @@ const STORE_PATH    = join(DATA_DIR, "automations.json");
 const GOVEE_BASE = "https://openapi.api.govee.com/router/api/v1";
 const anthropic  = new Anthropic();   // reads ANTHROPIC_API_KEY
 
+// Keep the proxy alive: a stray rejected promise or thrown error (a Govee API
+// hiccup, a disk write, a bad cron callback) should be LOGGED, never exit the
+// process — otherwise Railway reports a crash and restarts the whole service.
+process.on("unhandledRejection", (e) => console.error("unhandledRejection:", (e && e.message) || e));
+process.on("uncaughtException",  (e) => console.error("uncaughtException:",  (e && e.message) || e));
+
 const app = express();
 app.use(express.json({ limit: "256kb" }));
 
@@ -310,7 +316,7 @@ function loadStore() {
   try { store = existsSync(STORE_PATH) ? JSON.parse(readFileSync(STORE_PATH, "utf8")) : []; }
   catch { store = []; }
 }
-function saveStore() { writeFileSync(STORE_PATH, JSON.stringify(store, null, 2)); }
+function saveStore() { try { writeFileSync(STORE_PATH, JSON.stringify(store, null, 2)); } catch (e) { console.error("saveStore:", e.message); } }
 
 async function runAction(action) {
   if (!Object.keys(deviceMap).length) await listDevices().catch(() => {});
@@ -394,7 +400,7 @@ function loadGroups() {
   try { groups = existsSync(GROUP_PATH) ? JSON.parse(readFileSync(GROUP_PATH, "utf8")) : []; }
   catch { groups = []; }
 }
-function saveGroups() { writeFileSync(GROUP_PATH, JSON.stringify(groups, null, 2)); }
+function saveGroups() { try { writeFileSync(GROUP_PATH, JSON.stringify(groups, null, 2)); } catch (e) { console.error("saveGroups:", e.message); } }
 
 app.get("/groups", gate, (_req, res) => res.json({ data: groups }));
 app.post("/groups", gate, (req, res) => {
@@ -422,7 +428,7 @@ function loadTriggers() {
   try { triggers = existsSync(TRIG_PATH) ? JSON.parse(readFileSync(TRIG_PATH, "utf8")) : []; }
   catch { triggers = []; }
 }
-function saveTriggers() { writeFileSync(TRIG_PATH, JSON.stringify(triggers, null, 2)); }
+function saveTriggers() { try { writeFileSync(TRIG_PATH, JSON.stringify(triggers, null, 2)); } catch (e) { console.error("saveTriggers:", e.message); } }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Flash a color (or color sequence) N times, then restore each light's prior state.

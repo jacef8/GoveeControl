@@ -98,7 +98,7 @@
   </header>
 
   <main>
-    <div class="card" style="margin-top:4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="card" style="position:sticky;top:0;z-index:5;margin-top:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 6px 16px -10px rgba(0,0,0,.4)">
       <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:170px">
         <span style="font-size:13px;font-weight:800;white-space:nowrap">Apply to</span>
         <select id="gtarget" style="background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:14px system-ui;padding:8px 10px;flex:1"></select>
@@ -216,6 +216,12 @@ function currentTargets(){
   if(sceneTarget.startsWith("dev:")){ const d=DEVICES.find(x=>x.device===sceneTarget.slice(4)); return d?[d.deviceName]:deviceNames(); }
   return deviceNames();
 }
+function targetLabel(){
+  if(sceneTarget==="all") return "all lights";
+  if(sceneTarget.startsWith("grp:")){ const g=(SGROUPS||[]).find(x=>x.id===sceneTarget.slice(4)); return g?g.name:"group"; }
+  if(sceneTarget.startsWith("dev:")){ const d=DEVICES.find(x=>x.device===sceneTarget.slice(4)); return d?d.deviceName:"light"; }
+  return "all lights";
+}
 async function setBrightFor(val){
   if(CONFIG.USE_MOCK){ msg("Brightness "+val+"% (demo)"); return; }
   const names=currentTargets();
@@ -295,7 +301,7 @@ function renderPreview(s){
   startPvAnim(s);
   $("#pvmotion").onclick=()=>{ s.motion=!s.motion; if(!s.motion){ s.step=0; } else if(!s.step){ s.step=1500; } renderPreview(s); };
   const spEl=$("#pvspeed"); if(spEl) spEl.oninput=()=>{ const v=+spEl.value; s.step=Math.max(300,Math.round(4000-(v/100)*3700)); startPvAnim(s); };
-  $("#gapply").onclick=async(ev)=>{ flashEl(ev.currentTarget); toast(`Applied "${s.name}"`); msg(`Applied "${s.name}"${s.motion?` at ${(s.step/1000).toFixed(1)}s/step`:""}`); await applyScene(s); };
+  $("#gapply").onclick=async(ev)=>{ flashEl(ev.currentTarget); toast(`Applied "${s.name}" to ${targetLabel()}`); msg(`Applied "${s.name}" to ${targetLabel()}${s.motion?` · ${(s.step/1000).toFixed(1)}s/step`:""}`); await applyScene(s); };
   $("#gsave").onclick=(ev)=>{ flashEl(ev.currentTarget); addSaved(s); toast(`Saved "${s.name}"`); msg(`Saved "${s.name}"`); };
 }
 
@@ -585,10 +591,10 @@ $("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team
   msg(`Team set to ${team} — new score triggers use these colors`); };
 document.addEventListener("click", async e=>{
   const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
-  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); ack(sv,`Applied "${s.name}"`); renderPreview(s); await applyScene(s); return; }
+  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); ack(sv,`Applied "${s.name}" to ${targetLabel()}`); renderPreview(s); await applyScene(s); return; }
   const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; renderLibFilter(); renderLibrary(); return; }
-  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); ack(lb,`Applied "${p.name}"`); renderPreview(s); await applyScene(s); return; }
-  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); ack(bi,`Applied "${s.name}"`); await activateBuiltin(s); return; }
+  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); ack(lb,`Applied "${p.name}" to ${targetLabel()}`); renderPreview(s); await applyScene(s); return; }
+  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); ack(bi,`Applied "${s.name}" to ${targetLabel()}`); await activateBuiltin(s); return; }
   const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
   const trd=e.target.closest("[data-trdel]"); if(trd){ const id=trd.dataset.trdel; const ev=(TRIGGERS.find(x=>x.id===id)||{}).event; await trigDel(id); renderTriggers(); msg(`Removed trigger "${ev}"`); return; }
   const tg=e.target.closest("[data-tog]"); if(tg){ const id=tg.dataset.tog; const a=AUTO.find(x=>x.id===id); if(!a)return;

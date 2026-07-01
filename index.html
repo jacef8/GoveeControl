@@ -191,6 +191,23 @@
   .segstrip{display:flex; flex-wrap:wrap; gap:4px; margin-top:12px}
   .seg-cell{width:26px; height:36px; border-radius:3px; border:1px solid var(--line-strong); cursor:pointer; padding:0; transition:transform .1s}
   .seg-cell:active{transform:scale(.9)}
+  .ld-actions{display:flex; gap:9px}
+  .ld-act{flex:1; border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink);
+    font:600 14px 'Inter',system-ui; padding:11px; border-radius:5px; cursor:pointer}
+  .ld-act:active{transform:scale(.97)}
+  .ld-act:disabled{opacity:.4; cursor:not-allowed}
+  /* ---------- snapshots strip ---------- */
+  .snaps{flex:0 0 auto; display:flex; align-items:center; gap:8px; overflow-x:auto; padding:11px 16px;
+    border-bottom:1px solid var(--line); background:var(--surface)}
+  .snaps:empty{display:none}
+  .snaps #snapname{flex:0 0 auto; width:150px; padding:8px 11px; font-size:13px; border-radius:5px;
+    border:1px solid var(--line-strong); background:var(--surface-2); color:var(--ink); outline:none}
+  .snapsave{flex:0 0 auto; border:0; background:var(--accent); color:#fff; font:600 13px 'Inter',system-ui;
+    padding:8px 13px; border-radius:5px; cursor:pointer}
+  .snapchip{flex:0 0 auto; display:flex; align-items:center; border:1px solid var(--line-strong);
+    background:var(--surface-2); border-radius:5px; overflow:hidden}
+  .snapchip button{border:0; background:transparent; color:var(--ink); font:600 13px 'Inter',system-ui; padding:8px 11px; cursor:pointer}
+  .snapchip .snapx{color:var(--ink-faint); padding:8px 9px; border-left:1px solid var(--line)}
   .ld-head{display:flex; align-items:center; gap:11px; margin-bottom:4px}
   .ld-name{font-size:17px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .ld-sub{font-size:12.5px; color:var(--ink-faint)}
@@ -236,6 +253,7 @@
     </div>
   </header>
 
+  <div id="snaps" class="snaps"></div>
   <main id="app"><div class="empty">Loading lights…</div></main>
 
   <footer>
@@ -321,6 +339,7 @@ const Govee = (() => {
     // segment colors are tracked in the UI (_segColors); mock just accepts the command
     return { ok:true };
   }
+  async function mockFlash(){ await wait(150); return { ok:true }; }
 
   // ---------- LIVE backend (Railway proxy) ----------
   async function call(path, body){
@@ -349,6 +368,7 @@ const Govee = (() => {
     setColor:(id,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorRgb",rgbInt),
     setColorTemp:(id,k) =>(M?mockControl:liveControl)(id,"devices.capabilities.color_setting","colorTemperatureK",k),
     setSegmentColor:(id,segs,rgbInt)=>(M?mockControl:liveControl)(id,"devices.capabilities.segment_color_setting","segmentedColorRgb",{segment:segs,rgb:rgbInt}),
+    flash:(id,cols,times)=> M ? mockFlash() : call("/govee/flash",{device:id,cols,times}),
   };
 })();
 
@@ -567,7 +587,7 @@ async function load(){
     try{ GROUPS = await GroupsAPI.list(); }catch{ GROUPS = []; }
     const gmap = {}; GROUPS.forEach(g=>(g.devices||[]).forEach(id=>gmap[id]=g.name));
     DEVICES.forEach(d=>{ d.room = gmap[d.device] || d.room || "Ungrouped"; });
-    render();
+    render(); renderSnaps();
     const n = DEVICES.length, online = DEVICES.filter(d=>d.online).length;
     $("#status").textContent = `${online}/${n} online`;
     $("#updated").textContent = "· updated "+fmtTime(new Date());
@@ -579,6 +599,41 @@ async function load(){
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
 load();
 setInterval(load, CONFIG.POLL_MS);
+
+/* ============================================================
+   SNAPSHOTS — save the whole current lighting setup, restore later
+   ============================================================ */
+const Snaps = {
+  get(){ try{ return JSON.parse(localStorage.getItem("gv_snaps")||"[]"); }catch{ return []; } },
+  set(v){ localStorage.setItem("gv_snaps", JSON.stringify(v)); },
+};
+function renderSnaps(){
+  const el=document.getElementById("snaps"); if(!el) return;
+  const chips=Snaps.get().map(s=>`<span class="snapchip"><button data-snapapply="${s.id}" title="Apply">${s.name}</button><button class="snapx" data-snapdel="${s.id}" aria-label="Delete">✕</button></span>`).join("");
+  el.innerHTML=`<input id="snapname" placeholder="Name this setup…" maxlength="24"><button class="snapsave" id="snapsave">Save current</button>${chips}`;
+}
+function captureSnap(name){
+  if(!DEVICES.length) return;
+  const states={}; DEVICES.forEach(d=>{ states[d.device]={on:!!d._state.on,brightness:d._state.brightness,color:d._state.color,colorTemp:d._state.colorTemp||0}; });
+  const list=Snaps.get(); list.unshift({ id:"s"+Date.now(), name:(name||("Setup "+(list.length+1))).slice(0,24), states });
+  Snaps.set(list); renderSnaps(); toast("Snapshot saved");
+}
+function applySnap(id){
+  const s=Snaps.get().find(x=>x.id===id); if(!s) return;
+  DEVICES.forEach(d=>{ const st=s.states[d.device]; if(!st) return;
+    d._state.on=st.on; d._state.brightness=st.brightness; d._state.color=st.color; d._state.colorTemp=st.colorTemp;
+    Govee.setPower(d.device,st.on).catch(()=>{});
+    if(st.on){ Govee.setBright(d.device,st.brightness).catch(()=>{});
+      if(st.colorTemp) Govee.setColorTemp(d.device,st.colorTemp).catch(()=>{}); else Govee.setColor(d.device,st.color).catch(()=>{}); }
+  });
+  render(); toast(`Applied "${s.name}"`);
+}
+document.getElementById("snaps").addEventListener("click", e=>{
+  if(e.target.closest("#snapsave")){ const inp=document.getElementById("snapname"); captureSnap(inp?inp.value.trim():""); if(inp) inp.value=""; return; }
+  const ap=e.target.closest("[data-snapapply]"); if(ap){ applySnap(ap.dataset.snapapply); return; }
+  const dl=e.target.closest("[data-snapdel]"); if(dl){ Snaps.set(Snaps.get().filter(x=>x.id!==dl.dataset.snapdel)); renderSnaps(); return; }
+});
+renderSnaps();
 
 /* ============================================================
    LIGHT DETAIL  — full per-light controls (Govee-app style):
@@ -644,7 +699,11 @@ function wholeBody(d){
     <div class="ld-sec"><div class="ld-lbl"><span>White / temperature</span><span data-ldtempval>${temp}K</span></div>
       <input type="range" class="tempbar" min="2000" max="9000" step="100" value="${temp}" data-ldtemp ${d.online?'':'disabled'}>
       <div class="ld-whites">${whites}</div>
-    </div>`;
+    </div>
+    <div class="ld-sec"><div class="ld-actions">
+      <button class="ld-act" data-ldflash ${d.online?'':'disabled'}>Flash</button>
+      <button class="ld-act" data-ldrandom ${d.online?'':'disabled'}>Random color</button>
+    </div></div>`;
 }
 function attachWhole(card,d){
   const q=s=>card.querySelector(s);
@@ -654,6 +713,8 @@ function attachWhole(card,d){
   const tel=q("[data-ldtemp]"); tel.oninput=()=>{ const v=+tel.value; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); q("[data-ldtempval]").textContent=v+"K"; clearTimeout(d._ldt); d._ldt=setTimeout(()=>{ Govee.setColorTemp(d.device,v).catch(()=>{}); render(); },220); };
   card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
   card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); Govee.setColorTemp(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
+  const fb=q("[data-ldflash]"); if(fb) fb.onclick=()=>{ if(!d.online) return; const {r,g,b}=Govee.intToRgb(d._state.color); Govee.flash(d.device,[[r,g,b]],3).catch(()=>{}); toast("Flashing "+d.deviceName); };
+  const rb=q("[data-ldrandom]"); if(rb) rb.onclick=()=>{ if(!d.online) return; const v=Math.floor(Math.random()*0x1000000); d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); };
 }
 // Subsection: paint individual segments of an RGBIC strip
 function subBody(d,seg){

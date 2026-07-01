@@ -166,6 +166,14 @@ app.post("/govee/stop", gate, (_req, res) => {
   if (animTimer) { clearInterval(animTimer); animTimer = null; }
   res.json({ ok: true });
 });
+// Flash a light (or all) N times in a color, then restore. Reuses flash() below.
+app.post("/govee/flash", gate, async (req, res) => {
+  try {
+    await flash({ cols: req.body.cols, times: req.body.times, hold: req.body.hold,
+      _ids: req.body.device ? [req.body.device] : (req.body.devices || null) });
+    res.json({ ok: true });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
 
 /* ---------- built-in (hardware) dynamic scenes ---------- */
 // List a device's built-in light scenes + DIY scenes. These run smoothly on the
@@ -420,7 +428,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // Flash a color (or color sequence) N times, then restore each light's prior state.
 async function flash(action) {
   if (!Object.keys(deviceMap).length) await listDevices().catch(() => {});
-  const ids = Object.keys(deviceMap);
+  const ids = (action._ids && action._ids.length)
+    ? action._ids.filter((id) => deviceMap[id]) : Object.keys(deviceMap);
   const cols = (action.cols || [[255, 0, 0]]).map(rgbInt);
   const times = Math.min(action.times || 3, 6);
   const hold = Math.max(250, action.hold || 400);

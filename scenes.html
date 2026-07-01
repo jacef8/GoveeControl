@@ -76,6 +76,18 @@
   footer{flex:0 0 auto; padding:12px 18px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); font-size:13px; color:var(--ink-2); display:flex; gap:8px}
   .badge{margin-left:auto; background:color-mix(in srgb,#f5a623 15%,var(--surface)); color:#b9760a; font-weight:600; font-size:12px; border:1px solid color-mix(in srgb,#f5a623 35%,transparent); padding:4px 11px; border-radius:4px}
   @media (prefers-color-scheme: dark){ .badge{color:#ffd166} }
+  /* tap feedback + active state + toast */
+  @keyframes tapflash{0%{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 65%,transparent)}100%{box-shadow:0 0 0 12px transparent}}
+  .tapped{animation:tapflash .45s ease-out}
+  .scell.active,.card.active{border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 45%,transparent)}
+  .scell.active::after{content:"✓ Active"; position:absolute; top:6px; right:8px; font-size:10.5px; font-weight:700; color:#fff;
+    background:var(--accent); padding:2px 7px; border-radius:4px}
+  .scell{position:relative}
+  #toast{position:fixed; left:50%; bottom:70px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--surface); padding:12px 20px; border-radius:6px; font-weight:600; font-size:14.5px;
+    opacity:0; transition:opacity .22s, transform .22s; pointer-events:none; z-index:60; max-width:88vw; box-shadow:0 12px 40px -10px rgba(0,0,0,.4)}
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  #toast.err{background:var(--off); color:#fff}
 </style>
 </head>
 <body>
@@ -149,6 +161,7 @@
 
   <footer><span id="gmsg">Type a vibe and Generate — the real app sends this to Claude.</span>
     <span class="badge" id="modebadge">MOCK AI</span></footer>
+  <div id="toast"></div>
 
 <script>
 /* ============================================================
@@ -246,6 +259,10 @@ async function applyScene(s){
 let anim=null, lastScene=null;
 const $=s=>document.querySelector(s);
 function msg(t){ $("#gmsg").textContent=t; }
+function toast(t,isErr){ const el=$("#toast"); if(!el)return; el.textContent=t; el.className="show"+(isErr?" err":""); clearTimeout(el._h); el._h=setTimeout(()=>el.className="",1800); }
+function flashEl(el){ if(!el)return; el.classList.remove("tapped"); void el.offsetWidth; el.classList.add("tapped"); setTimeout(()=>el.classList.remove("tapped"),470); }
+function setActive(el){ if(!el)return; const grid=el.parentElement; if(grid) grid.querySelectorAll(".active").forEach(x=>x.classList.remove("active")); el.classList.add("active"); }
+function ack(el,text){ flashEl(el); toast(text); msg(text); }   // press flash + toast + footer
 function stripHTML(cols,id){ return `<div id="${id}" class="bar" style="display:flex;gap:4px;border:2px solid var(--line)">`+
   cols.map(c=>`<span style="flex:1;background:${rgb(c)}"></span>`).join("")+`</div>`; }
 
@@ -278,8 +295,8 @@ function renderPreview(s){
   startPvAnim(s);
   $("#pvmotion").onclick=()=>{ s.motion=!s.motion; if(!s.motion){ s.step=0; } else if(!s.step){ s.step=1500; } renderPreview(s); };
   const spEl=$("#pvspeed"); if(spEl) spEl.oninput=()=>{ const v=+spEl.value; s.step=Math.max(300,Math.round(4000-(v/100)*3700)); startPvAnim(s); };
-  $("#gapply").onclick=async()=>{ await applyScene(s); msg(`Applied "${s.name}"${s.motion?` at ${(s.step/1000).toFixed(1)}s/step`:""}`); };
-  $("#gsave").onclick=()=>{ addSaved(s); msg(`Saved "${s.name}"`); };
+  $("#gapply").onclick=async(ev)=>{ flashEl(ev.currentTarget); toast(`Applied "${s.name}"`); msg(`Applied "${s.name}"${s.motion?` at ${(s.step/1000).toFixed(1)}s/step`:""}`); await applyScene(s); };
+  $("#gsave").onclick=(ev)=>{ flashEl(ev.currentTarget); addSaved(s); toast(`Saved "${s.name}"`); msg(`Saved "${s.name}"`); };
 }
 
 /* ---------- saved scenes ---------- */
@@ -543,9 +560,10 @@ function renderTriggers(){
     <div class="sw ${t.enabled?'on':''}" data-trtog="${t.id}"><span class="k"></span></div>
     <button class="ex" data-trdel="${t.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:8px">✕</button></div>`).join("");
 }
-$("#ggen").onclick=async()=>{ const p=$("#gp").value||"multicolored moving party";
-  msg("Generating scene…"); const s=await designScene(p); renderPreview(s);
-  msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`); };
+$("#ggen").onclick=async(ev)=>{ const p=$("#gp").value||"multicolored moving party";
+  flashEl(ev&&ev.currentTarget); toast("Generating scene…"); msg("Generating scene…");
+  const s=await designScene(p); renderPreview(s);
+  toast(`Generated "${s.name}"`); msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`); };
 $("#gp").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#ggen").click(); } });
 $("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
 $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;
@@ -556,21 +574,21 @@ $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return
   sched.enabled=true;
   await autoAdd(sched); $("#gschin").value=""; await renderAuto();
   const where=gid?` for ${SGROUPS.find(g=>g.id===gid)?.name||"group"}`:" for all lights";
-  msg(`Automation saved${where} — Railway cron will fire it`); };
+  toast(`Timer saved${where}`); msg(`Automation saved${where} — Railway cron will fire it`); };
 $("#gtrigadd").onclick=async()=>{
   const ev=$("#gtrigev").value.trim().toLowerCase().replace(/\s+/g,"_"); if(!ev)return;
   const sel=$("#gtrigact").value;
   await trigAdd({ event:ev, label:actLabel(sel), action:buildAction(sel), enabled:true });
   $("#gtrigev").value=""; renderTriggers();
-  msg(`Trigger added — point an IFTTT applet at ${hookUrl(ev)}`); };
+  toast(`Trigger "${ev}" added`); msg(`Trigger added — point an IFTTT applet at ${hookUrl(ev)}`); };
 $("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team",team); renderTeam();
   msg(`Team set to ${team} — new score triggers use these colors`); };
 document.addEventListener("click", async e=>{
   const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
-  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; renderPreview(s); await applyScene(s); msg(`Applied "${s.name}"`); return; }
+  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); ack(sv,`Applied "${s.name}"`); renderPreview(s); await applyScene(s); return; }
   const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; renderLibFilter(); renderLibrary(); return; }
-  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); renderPreview(s); await applyScene(s); msg(`Activated "${p.name}"`); return; }
-  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; await activateBuiltin(s); msg(`Activated built-in "${s.name}"`); return; }
+  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); ack(lb,`Applied "${p.name}"`); renderPreview(s); await applyScene(s); return; }
+  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); ack(bi,`Applied "${s.name}"`); await activateBuiltin(s); return; }
   const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
   const trd=e.target.closest("[data-trdel]"); if(trd){ const id=trd.dataset.trdel; const ev=(TRIGGERS.find(x=>x.id===id)||{}).event; await trigDel(id); renderTriggers(); msg(`Removed trigger "${ev}"`); return; }
   const tg=e.target.closest("[data-tog]"); if(tg){ const id=tg.dataset.tog; const a=AUTO.find(x=>x.id===id); if(!a)return;

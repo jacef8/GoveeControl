@@ -207,6 +207,9 @@
     font:600 13px 'Inter',system-ui; padding:8px 13px; border-radius:5px; cursor:pointer}
   .scenechip:active{transform:scale(.96)}
   .scenechip:disabled{opacity:.4; cursor:not-allowed}
+  .scenechip.active{border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
+  @keyframes tapflash{0%{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 65%,transparent)}100%{box-shadow:0 0 0 12px transparent}}
+  .tapped{animation:tapflash .45s ease-out}
   /* ---------- snapshots strip ---------- */
   .snaps{flex:0 0 auto; display:flex; align-items:center; gap:8px; overflow-x:auto; padding:11px 16px;
     border-bottom:1px solid var(--line); background:var(--surface)}
@@ -430,6 +433,7 @@ function toast(msg, isErr){
   clearTimeout(t._h); t._h=setTimeout(()=>t.className="",1900);
 }
 function fmtTime(d){ return d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"}); }
+function flashEl(el){ if(!el)return; el.classList.remove("tapped"); void el.offsetWidth; el.classList.add("tapped"); setTimeout(()=>el.classList.remove("tapped"),470); }
 
 function render(){
   if(!DEVICES.length){ app.innerHTML='<div class="empty">No lights found.</div>'; return; }
@@ -712,7 +716,9 @@ function renderLightDetail(){
   attachWhole(card,d);
   if(seg.supported) attachSub(card,d,seg);
   card.querySelectorAll("[data-ldscene]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
-    const s=(d._scenes||[])[+b.dataset.ldscene]; if(!s) return; Govee.applyBuiltin(d.device,s.value,s.instance).catch(()=>{}); toast("Scene: "+s.name); });
+    const s=(d._scenes||[])[+b.dataset.ldscene]; if(!s) return;
+    b.parentElement.querySelectorAll(".active").forEach(x=>x.classList.remove("active")); b.classList.add("active"); flashEl(b);
+    Govee.applyBuiltin(d.device,s.value,s.instance).catch(()=>{}); toast("Scene: "+s.name); });
 }
 function wholeBody(d){
   const bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;
@@ -740,8 +746,8 @@ function attachWhole(card,d){
   const hel=q("[data-ldhue]"); hel.oninput=()=>{ const v=hueToRgb(+hel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldh); d._ldh=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); },180); };
   const pel=q("[data-ldpick]"); pel.oninput=()=>{ const v=hexInt(pel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldp); d._ldp=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); },180); };
   const tel=q("[data-ldtemp]"); tel.oninput=()=>{ const v=+tel.value; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); q("[data-ldtempval]").textContent=v+"K"; clearTimeout(d._ldt); d._ldt=setTimeout(()=>{ Govee.setColorTemp(d.device,v).catch(()=>{}); render(); },220); };
-  card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
-  card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); Govee.setColorTemp(d.device,v).catch(()=>{}); render(); renderLightDetail(); });
+  card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); toast("Color set"); render(); renderLightDetail(); });
+  card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); Govee.setColorTemp(d.device,v).catch(()=>{}); toast(v+"K white"); render(); renderLightDetail(); });
   const fb=q("[data-ldflash]"); if(fb) fb.onclick=()=>{ if(!d.online) return; const {r,g,b}=Govee.intToRgb(d._state.color); Govee.flash(d.device,[[r,g,b]],3).catch(()=>{}); toast("Flashing "+d.deviceName); };
   const rb=q("[data-ldrandom]"); if(rb) rb.onclick=()=>{ if(!d.online) return; const v=Math.floor(Math.random()*0x1000000); d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); };
 }

@@ -531,30 +531,30 @@ app.addEventListener("click", e=>{
   const pwr = e.target.closest("[data-pwr]");
   if(pwr){ const d = byId(pwr.dataset.pwr); if(!d.online) return toast("Light is offline",true);
     const next = !d._state.on;
-    return safe(()=>Govee.setPower(d.device,next), ()=>{ d._state.on=next; render(); });
+    return safe(()=>Govee.setPower(d.device,next), ()=>{ d._state.on=next; touch(d); render(); });
   }
   const ld = e.target.closest("[data-litedetail]");
   if(ld){ return openLight(ld.dataset.litedetail); }
   const sw = e.target.closest("[data-color]");
   if(sw){ const d = byId(sw.dataset.dev); const v = +sw.dataset.color;
-    return safe(()=>Govee.setColor(d.device,v), ()=>{ d._state.color=v; render(); });
+    return safe(()=>Govee.setColor(d.device,v), ()=>{ d._state.color=v; touch(d); render(); });
   }
   const gtog = e.target.closest("[data-grptoggle]");
   if(gtog){ const name=gtog.dataset.grptoggle; const online=DEVICES.filter(d=>d.room===name && d.online);
     const want = !online.some(d=>d._state.on);   // any on -> turn all off, else all on
-    online.forEach(d=>{ d._state.on=want; Govee.setPower(d.device,want).catch(()=>{}); });
+    online.forEach(d=>{ d._state.on=want; touch(d); Govee.setPower(d.device,want).catch(()=>{}); });
     render(); toast(`${name}: all ${want?'on':'off'}`); return;
   }
   const gcol = e.target.closest("[data-grpcolor]");
   if(gcol){ const v=+gcol.dataset.grpcolor; const name=gcol.dataset.grp;
-    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>{ d._state.color=v; Govee.setColor(d.device,v).catch(()=>{}); });
+    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>{ d._state.color=v; touch(d); Govee.setColor(d.device,v).catch(()=>{}); });
     render(); toast(`${name}: color set`); return;
   }
 });
 app.addEventListener("input", e=>{
   const bri = e.target.closest("[data-bri]");
   if(bri){ const d=byId(bri.dataset.bri); const v=+bri.value;
-    d._state.brightness=v; bri.style.setProperty("--p",v+"%");
+    d._state.brightness=v; touch(d); bri.style.setProperty("--p",v+"%");
     const lbl=bri.closest(".ctl")?.querySelector(".lbl span:last-child"); if(lbl) lbl.textContent=v+"%";
     clearTimeout(d._briT); d._briT=setTimeout(()=>{
       safe(()=>Govee.setBright(d.device,v));
@@ -562,20 +562,20 @@ app.addEventListener("input", e=>{
   }
   const pick = e.target.closest("[data-pick]");
   if(pick){ const d=byId(pick.dataset.pick); const v=hexInt(pick.value);
-    d._state.color=v; clearTimeout(d._colT); d._colT=setTimeout(()=>{
+    d._state.color=v; touch(d); clearTimeout(d._colT); d._colT=setTimeout(()=>{
       safe(()=>Govee.setColor(d.device,v), ()=>render());
     },220);
   }
   const gbri = e.target.closest("[data-grpbri]");
   if(gbri){ const v=+gbri.value; const name=gbri.dataset.grpbri; gbri.style.setProperty("--p",v+"%");
-    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>d._state.brightness=v);
+    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>{ d._state.brightness=v; touch(d); });
     clearTimeout(gbri._t); gbri._t=setTimeout(()=>{
       DEVICES.filter(d=>d.room===name && d.online).forEach(d=>Govee.setBright(d.device,v).catch(()=>{}));
     },250); // debounce while dragging the group slider
   }
   const gpick = e.target.closest("[data-grppick]");
   if(gpick){ const v=hexInt(gpick.value); const name=gpick.dataset.grppick;
-    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>d._state.color=v);
+    DEVICES.filter(d=>d.room===name && d.online).forEach(d=>{ d._state.color=v; touch(d); });
     clearTimeout(gpick._t); gpick._t=setTimeout(()=>{
       DEVICES.filter(d=>d.room===name && d.online).forEach(d=>Govee.setColor(d.device,v).catch(()=>{}));
     },180);
@@ -592,11 +592,14 @@ document.querySelector("header").addEventListener("click", e=>{
   }
 });
 const byId = id => DEVICES.find(d=>d.device===id);
+const touch = d => { if(d) d._touched = Date.now(); };   // mark as just-changed (poll won't clobber for 15s)
 
 /* ---------- load + poll ---------- */
 async function load(){
   try{
     $("#status").textContent = "Refreshing…";
+    // remember anything the user just changed, so a slow cloud read can't snap it back
+    const recent = {}; DEVICES.forEach(d=>{ if(d._touched) recent[d.device]={touched:d._touched, state:d._state}; });
     DEVICES = await Govee.list();
     // mock list already carries _state; live list will need a state fetch per device:
     if(!CONFIG.USE_MOCK){
@@ -605,6 +608,8 @@ async function load(){
           d.online = s?.online ?? true;
           d._state = { on:!!s.on, brightness:s.brightness??100, color:s.color??Govee.rgbToInt(255,255,255) };
         }catch{ d.online=false; d._state={on:false,brightness:100,color:Govee.rgbToInt(255,255,255)}; }
+        const p = recent[d.device];   // keep a change made in the last 15s
+        if(p && (Date.now()-p.touched) < 15000 && p.state){ d._state = p.state; d._touched = p.touched; }
       }));
     }
     // assign each device to its group (server-synced); ungrouped fall to "Ungrouped"
@@ -645,7 +650,7 @@ function captureSnap(name){
 function applySnap(id){
   const s=Snaps.get().find(x=>x.id===id); if(!s) return;
   DEVICES.forEach(d=>{ const st=s.states[d.device]; if(!st) return;
-    d._state.on=st.on; d._state.brightness=st.brightness; d._state.color=st.color; d._state.colorTemp=st.colorTemp;
+    d._state.on=st.on; d._state.brightness=st.brightness; d._state.color=st.color; d._state.colorTemp=st.colorTemp; touch(d);
     Govee.setPower(d.device,st.on).catch(()=>{});
     if(st.on){ Govee.setBright(d.device,st.brightness).catch(()=>{});
       if(st.colorTemp) Govee.setColorTemp(d.device,st.colorTemp).catch(()=>{}); else Govee.setColor(d.device,st.color).catch(()=>{}); }
@@ -742,14 +747,14 @@ function wholeBody(d){
 }
 function attachWhole(card,d){
   const q=s=>card.querySelector(s);
-  const bel=q("[data-ldbri]"); bel.oninput=()=>{ const v=+bel.value; d._state.brightness=v; bel.style.setProperty("--p",v+"%"); q("[data-ldbrival]").textContent=v+"%"; clearTimeout(d._ldb); d._ldb=setTimeout(()=>Govee.setBright(d.device,v).catch(()=>{}),220); };
-  const hel=q("[data-ldhue]"); hel.oninput=()=>{ const v=hueToRgb(+hel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldh); d._ldh=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); },180); };
-  const pel=q("[data-ldpick]"); pel.oninput=()=>{ const v=hexInt(pel.value); d._state.color=v; d._state.colorTemp=0; clearTimeout(d._ldp); d._ldp=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); },180); };
-  const tel=q("[data-ldtemp]"); tel.oninput=()=>{ const v=+tel.value; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); q("[data-ldtempval]").textContent=v+"K"; clearTimeout(d._ldt); d._ldt=setTimeout(()=>{ Govee.setColorTemp(d.device,v).catch(()=>{}); render(); },220); };
-  card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); toast("Color set"); render(); renderLightDetail(); });
-  card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); Govee.setColorTemp(d.device,v).catch(()=>{}); toast(v+"K white"); render(); renderLightDetail(); });
+  const bel=q("[data-ldbri]"); bel.oninput=()=>{ const v=+bel.value; d._state.brightness=v; touch(d); bel.style.setProperty("--p",v+"%"); q("[data-ldbrival]").textContent=v+"%"; clearTimeout(d._ldb); d._ldb=setTimeout(()=>Govee.setBright(d.device,v).catch(()=>{}),220); };
+  const hel=q("[data-ldhue]"); hel.oninput=()=>{ const v=hueToRgb(+hel.value); d._state.color=v; d._state.colorTemp=0; touch(d); clearTimeout(d._ldh); d._ldh=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); },180); };
+  const pel=q("[data-ldpick]"); pel.oninput=()=>{ const v=hexInt(pel.value); d._state.color=v; d._state.colorTemp=0; touch(d); clearTimeout(d._ldp); d._ldp=setTimeout(()=>{ Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); },180); };
+  const tel=q("[data-ldtemp]"); tel.oninput=()=>{ const v=+tel.value; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); touch(d); q("[data-ldtempval]").textContent=v+"K"; clearTimeout(d._ldt); d._ldt=setTimeout(()=>{ Govee.setColorTemp(d.device,v).catch(()=>{}); render(); },220); };
+  card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; touch(d); Govee.setColor(d.device,v).catch(()=>{}); toast("Color set"); render(); renderLightDetail(); });
+  card.querySelectorAll("[data-ldwhite]").forEach(b=>b.onclick=()=>{ const v=+b.dataset.ldwhite; d._state.colorTemp=v; d._state.color=kelvinToRgb(v); touch(d); Govee.setColorTemp(d.device,v).catch(()=>{}); toast(v+"K white"); render(); renderLightDetail(); });
   const fb=q("[data-ldflash]"); if(fb) fb.onclick=()=>{ if(!d.online) return; const {r,g,b}=Govee.intToRgb(d._state.color); Govee.flash(d.device,[[r,g,b]],3).catch(()=>{}); toast("Flashing "+d.deviceName); };
-  const rb=q("[data-ldrandom]"); if(rb) rb.onclick=()=>{ if(!d.online) return; const v=Math.floor(Math.random()*0x1000000); d._state.color=v; d._state.colorTemp=0; Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); };
+  const rb=q("[data-ldrandom]"); if(rb) rb.onclick=()=>{ if(!d.online) return; const v=Math.floor(Math.random()*0x1000000); d._state.color=v; d._state.colorTemp=0; touch(d); Govee.setColor(d.device,v).catch(()=>{}); render(); renderLightDetail(); };
 }
 // Subsection: paint individual segments of an RGBIC strip
 function subBody(d,seg){

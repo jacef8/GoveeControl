@@ -3,35 +3,23 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#0c1018" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#070610" />
 <link rel="manifest" href="manifest.json" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <title>Govee Control</title>
 <style>
-  /* ============ THEME (auto light/dark) ============ */
+  /* ============ THEME (dark, glow-forward — Nanoleaf/Govee vibe) ============ */
   :root{
     --avh:100dvh; --radius:18px;
-    --bg:linear-gradient(180deg,#f5f7fc 0%,#e9edf5 100%);
-    --surface:#ffffff; --surface-2:#f2f5fa;
-    --ink:#0f1421; --ink-2:#475067; --ink-faint:#828ca3;
-    --line:#e4e9f1; --line-strong:#d3dae6;
-    --accent:#2f6bf2; --on:#15a35a; --off:#e23b48;
-    --shadow-card:0 6px 20px rgba(24,38,74,.06);
-    --glowop:.14;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:radial-gradient(125% 80% at 50% -10%,#19223a 0%,#0d1320 55%,#0a0e18 100%);
-      --surface:#161d2c; --surface-2:#1d2536;
-      --ink:#f3f6fc; --ink-2:#aab4cb; --ink-faint:#6f7b94;
-      --line:#28324599; --line-strong:#36405a;
-      --accent:#5e8bff; --on:#33d27e; --off:#ff5d6a;
-      --shadow-card:0 10px 30px rgba(0,0,0,.4);
-      --glowop:.32;
-    }
+    --bg:radial-gradient(125% 90% at 18% -5%, #1a1230 0%, #0c0a16 52%, #060510 100%);
+    --surface:#15131f; --surface-2:#201d30;
+    --ink:#f4f2fa; --ink-2:#b7b3cf; --ink-faint:#7e7a97;
+    --line:#2a2740; --line-strong:#3c3860;
+    --accent:#8a7bff; --on:#39d98a; --off:#ff5d6a;
+    --shadow-card:0 12px 34px rgba(0,0,0,.5);
+    --glowop:.5;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
@@ -57,8 +45,14 @@
     display:flex; align-items:center; justify-content:center; transition:background .15s}
   .act:first-child{border-left:0}
   .act:active{background:var(--line)}
-  .act.on{color:var(--on); background:color-mix(in srgb,var(--on) 13%,var(--surface))}
-  .act.off{color:var(--off); background:color-mix(in srgb,var(--off) 11%,var(--surface))}
+  .act.on{color:var(--on); background:color-mix(in srgb,var(--on) 16%,var(--surface))}
+  .act.off{color:var(--off); background:color-mix(in srgb,var(--off) 14%,var(--surface))}
+  /* section nav: Lights / Scenes / Timers */
+  .nav{display:flex; gap:8px}
+  .navlink{flex:1; text-align:center; padding:10px; border-radius:12px; cursor:pointer; text-decoration:none;
+    font:600 14px 'Inter',system-ui; color:var(--ink-2); background:rgba(255,255,255,.05)}
+  .navlink.active{color:#fff; background:linear-gradient(90deg,rgba(138,123,255,.55),rgba(80,140,255,.5));
+    box-shadow:0 5px 20px -5px rgba(120,110,255,.7)}
   /* ---------- scroll body ---------- */
   main{flex:1 1 auto; overflow:auto; padding:18px 16px 34px; -webkit-overflow-scrolling:touch}
   .grpttl{font-size:17px; font-weight:700; color:var(--ink); margin:24px 4px 13px; letter-spacing:-.3px;
@@ -141,7 +135,7 @@
   @media (min-width:640px){ .bento{grid-template-columns:repeat(2,minmax(0,1fr))} .tile.wide{grid-column:span 2} }
   @media (min-width:1080px){ .bento{grid-template-columns:repeat(3,minmax(0,1fr))} }
   .tile{position:relative; display:flex; flex-direction:column; gap:13px; overflow:hidden;
-    background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:16px 17px; box-shadow:var(--shadow-card)}
+    background:rgba(255,255,255,.025); border:1px solid var(--line); border-radius:22px; padding:16px 17px; box-shadow:var(--shadow-card)}
   .thead{display:flex; align-items:center; gap:11px}
   .tname{flex:1; font-size:16.5px; font-weight:700; letter-spacing:-.3px; color:var(--ink);
     display:flex; align-items:baseline; gap:9px; min-width:0}
@@ -162,15 +156,19 @@
   /* light chips inside a tile */
   .lites{display:grid; grid-template-columns:1fr; gap:10px}
   @media (min-width:520px){ .tile.wide .lites{grid-template-columns:1fr 1fr} }
-  .lite{background:var(--surface-2); border:1px solid var(--line); border-radius:5px; padding:12px 13px;
-    display:flex; flex-direction:column; gap:11px; transition:border-color .3s}
-  .lite.on{border-color:color-mix(in srgb,var(--litec,#3a6df0) 50%,var(--line))}
-  .lite.offline{opacity:.5}
-  .literow{display:flex; align-items:center; gap:10px}
-  .litedot{width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:var(--litec,#888);
-    box-shadow:0 0 8px color-mix(in srgb,var(--litec,#888) 60%,transparent)}
-  .litename{flex:1; min-width:0; font-size:14.5px; font-weight:600; color:var(--ink);
+  .lite{background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:18px; padding:15px;
+    display:flex; flex-direction:column; gap:6px; transition:border-color .3s, box-shadow .3s, background .3s}
+  .lite.on{border-color:color-mix(in srgb,var(--litec,#8a7bff) 55%,var(--line));
+    background:radial-gradient(130% 120% at 28% 0%, color-mix(in srgb,var(--litec,#8a7bff) 22%, transparent), rgba(255,255,255,.03));
+    box-shadow:0 10px 30px -10px color-mix(in srgb,var(--litec,#8a7bff) 65%, transparent)}
+  .lite.offline{opacity:.45}
+  .literow{display:flex; align-items:center; gap:12px}
+  .litedot{width:26px;height:26px;border-radius:9px;flex:0 0 auto;background:var(--litec,#888);
+    box-shadow:0 0 18px color-mix(in srgb,var(--litec,#888) 85%,transparent)}
+  .lite:not(.on) .litedot{box-shadow:none; opacity:.7}
+  .litename{flex:1; min-width:0; font-size:15.5px; font-weight:650; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .litestatus{font-size:12.5px; color:var(--ink-2); font-weight:500}
   .literow2{display:flex; align-items:center; gap:11px}
   .literow2 input[type=range]{flex:1; height:6px}
   .lite .sw{width:46px;height:26px}
@@ -256,14 +254,18 @@
 <body>
   <header>
     <div class="appbar">
-      <div class="brand"><span class="logo"></span> Govee Control</div>
+      <div class="brand"><span class="logo"></span> Govee</div>
       <button class="icon" data-act="refresh" title="Refresh">⟳</button>
     </div>
+    <nav class="nav">
+      <span class="navlink active">Lights</span>
+      <a class="navlink" href="scenes.html">Scenes</a>
+      <a class="navlink" href="scenes.html#timers">Timers</a>
+    </nav>
     <div class="actions">
       <button class="act on" data-act="allon">All On</button>
       <button class="act off" data-act="alloff">All Off</button>
       <button class="act" data-act="groups">Groups</button>
-      <a class="act" href="scenes.html">Scenes</a>
     </div>
   </header>
 
@@ -486,20 +488,16 @@ function liteHTML(d){
   const c = cssRgb(d._state.color);
   const on = d._state.on && d.online;
   const bri = d._state.brightness;
+  const status = !d.online ? "Offline" : (on ? `On · ${bri}%` : "Off");
   return `<div class="lite ${on?'on':''} ${d.online?'':'offline'}" style="--litec:${c}">
     <div class="literow">
-      <button class="litemain" data-litedetail="${d.device}" title="More controls">
+      <button class="litemain" data-litedetail="${d.device}" title="Open controls">
         <span class="litedot"></span>
         <span class="litename">${d.deviceName}</span>
-        <span class="litemore">⋯</span>
       </button>
       <div class="sw" data-pwr="${d.device}" role="switch" aria-checked="${on}"><span class="knob"></span></div>
     </div>
-    <div class="literow2">
-      <span class="bicon" title="Brightness">☀</span>
-      <input type="range" min="1" max="100" value="${bri}" data-bri="${d.device}" style="--p:${bri}%" ${d.online?'':'disabled'}>
-      <input type="color" class="swatch picker" value="${rgbHex(d._state.color)}" data-pick="${d.device}" title="Color" ${d.online?'':'disabled'}>
-    </div>
+    <div class="litestatus" data-litedetail="${d.device}">${status}</div>
   </div>`;
 }
 function rgbHex(n){ const {r,g,b}=Govee.intToRgb(n);

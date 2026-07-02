@@ -11,27 +11,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <title>Govee · Scenes &amp; Automations</title>
 <style>
-  /* ============ THEME (auto light/dark) — shared with index.html ============ */
+  /* ============ THEME (dark, glow-forward — matches index.html) ============ */
   :root{
-    --avh:100dvh; --bw:1px; --radius:6px;
-    --bg:linear-gradient(180deg,#f5f7fc 0%,#e9edf5 100%);
-    --surface:#ffffff; --surface-2:#f2f5fa;
-    --ink:#0f1421; --ink-2:#475067; --dim:#5a647a; --ink-faint:#828ca3;
-    --line:#e4e9f1; --line-strong:#d3dae6; --stroke:#e4e9f1; --stroke2:#d3dae6;
-    --glass:#ffffff; --glass2:#f2f5fa;
-    --accent:#2f6bf2; --accent-soft:#e7eefc; --on:#15a35a; --off:#e23b48;
-    --shadow-card:0 6px 20px rgba(24,38,74,.06);
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:radial-gradient(125% 80% at 50% -10%,#19223a 0%,#0d1320 55%,#0a0e18 100%);
-      --surface:#161d2c; --surface-2:#1d2536;
-      --ink:#f3f6fc; --ink-2:#aab4cb; --dim:#9aa6bd; --ink-faint:#6f7b94;
-      --line:#283145; --line-strong:#36405a; --stroke:#283145; --stroke2:#36405a;
-      --glass:#161d2c; --glass2:#1d2536;
-      --accent:#5e8bff; --accent-soft:#23304e; --on:#33d27e; --off:#ff5d6a;
-      --shadow-card:0 10px 30px rgba(0,0,0,.4);
-    }
+    --avh:100dvh; --bw:1px; --radius:14px;
+    --bg:radial-gradient(125% 90% at 18% -5%, #1a1230 0%, #0c0a16 52%, #060510 100%);
+    --surface:#15131f; --surface-2:#201d30;
+    --ink:#f4f2fa; --ink-2:#b7b3cf; --dim:#9a96b4; --ink-faint:#7e7a97;
+    --line:#2a2740; --line-strong:#3c3860; --stroke:#2a2740; --stroke2:#3c3860;
+    --glass:#201d30; --glass2:#282542;
+    --accent:#8a7bff; --accent-soft:#2a2452; --on:#39d98a; --off:#ff5d6a;
+    --shadow-card:0 12px 34px rgba(0,0,0,.5);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;

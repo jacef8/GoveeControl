@@ -464,7 +464,8 @@ function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typ
 renderSaved();
 
 /* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
-const LIB_CATS = ["All","Movement","Party","Calm","Nature","Holiday"];
+const LIB_CATS = ["All","Movement","Party","Calm","Nature","Holidays"];
+const SEASON_EMOJI = {Winter:"❄️", Spring:"🌸", Summer:"☀️", Fall:"🍂"};
 const PRESETS = [
   // "Movement" scenes animate UP AND DOWN individual strip segments (chase/wave)
   // instead of just cycling the whole light's color — only runs on RGBIC strips
@@ -490,10 +491,31 @@ const PRESETS = [
   {name:"Forest",       cat:"Nature",motion:true, step:2200, cols:[[20,120,40],[60,170,40],[120,200,60],[30,140,90]]},
   {name:"Thunderstorm", cat:"Nature",motion:true, step:600,  cols:[[40,50,80],[200,210,255],[60,70,110],[255,255,255]]},
   {name:"Firelight",    cat:"Nature",motion:true, step:700,  cols:[[255,70,0],[255,140,20],[255,40,0],[255,170,60]]},
-  {name:"Christmas",    cat:"Holiday",motion:true,step:1500, cols:[[230,20,30],[20,180,60],[255,255,255]]},
-  {name:"Halloween",    cat:"Holiday",motion:true,step:1200, cols:[[255,120,0],[150,0,255],[80,255,0]]},
-  {name:"Valentine",    cat:"Holiday",motion:true,step:1800, cols:[[255,40,90],[255,140,170],[255,255,255]]},
-  {name:"Stars & Stripes",cat:"Holiday",motion:true,step:1100,cols:[[220,30,40],[255,255,255],[30,60,200]]},
+  // Holiday movement shows — several per holiday (chase + wave), grouped by
+  // season in the library view. Same graceful fallback as other Movement
+  // scenes: non-segment lights get a plain color cycle instead.
+  {name:"Countdown Chase",       cat:"Holidays", holiday:"New Year's",       season:"Winter", pattern:"chase", bandWidth:3, step:160, motion:true, cols:[[255,215,0],[255,255,255],[192,192,192]]},
+  {name:"Champagne Sparkle Wave",cat:"Holidays", holiday:"New Year's",       season:"Winter", pattern:"wave",  step:500, motion:true, cols:[[255,215,0],[255,255,255],[200,200,220]]},
+  {name:"Sweetheart Chase",      cat:"Holidays", holiday:"Valentine's Day",  season:"Winter", pattern:"chase", bandWidth:4, step:230, motion:true, cols:[[255,40,90],[255,255,255]]},
+  {name:"Rose Petal Wave",       cat:"Holidays", holiday:"Valentine's Day",  season:"Winter", pattern:"wave",  step:600, motion:true, cols:[[255,20,60],[255,120,160],[255,255,255]]},
+  {name:"Shamrock Runner",       cat:"Holidays", holiday:"St. Patrick's Day",season:"Spring", pattern:"chase", bandWidth:4, step:200, motion:true, cols:[[0,160,60],[255,215,0]]},
+  {name:"Emerald Wave",          cat:"Holidays", holiday:"St. Patrick's Day",season:"Spring", pattern:"wave",  step:550, motion:true, cols:[[0,110,40],[0,200,90],[255,215,0]]},
+  {name:"Easter Basket Chase",   cat:"Holidays", holiday:"Easter",          season:"Spring", pattern:"chase", bandWidth:5, step:260, motion:true, cols:[[255,182,213],[186,156,255],[160,255,210],[255,246,153]]},
+  {name:"Pastel Meadow Wave",    cat:"Holidays", holiday:"Easter",          season:"Spring", pattern:"wave",  step:700, motion:true, cols:[[255,182,213],[186,156,255],[160,255,210],[255,246,153]]},
+  {name:"Old Glory Chase",       cat:"Holidays", holiday:"Memorial Day",    season:"Summer", pattern:"chase", bandWidth:4, step:220, motion:true, cols:[[191,10,48],[255,255,255],[10,49,97]]},
+  {name:"Remembrance Wave",      cat:"Holidays", holiday:"Memorial Day",    season:"Summer", pattern:"wave",  step:650, motion:true, cols:[[191,10,48],[255,255,255],[10,49,97]]},
+  {name:"Fireworks Chase",       cat:"Holidays", holiday:"Independence Day",season:"Summer", pattern:"chase", bandWidth:3, step:140, motion:true, cols:[[220,20,40],[255,255,255],[20,60,180]]},
+  {name:"Firework Burst Wave",   cat:"Holidays", holiday:"Independence Day",season:"Summer", pattern:"wave",  step:400, motion:true, cols:[[220,20,40],[255,255,255],[20,60,180],[255,200,0]]},
+  {name:"Spooky Chase",          cat:"Holidays", holiday:"Halloween",       season:"Fall",   pattern:"chase", bandWidth:4, step:190, motion:true, cols:[[255,110,0],[120,0,180]]},
+  {name:"Witch's Brew Wave",     cat:"Holidays", holiday:"Halloween",       season:"Fall",   pattern:"wave",  step:520, motion:true, cols:[[255,110,0],[120,0,180],[60,200,60]]},
+  {name:"Harvest Chase",         cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"chase", bandWidth:5, step:280, motion:true, cols:[[200,90,20],[120,20,20],[255,180,40]]},
+  {name:"Autumn Leaves Wave",    cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"wave",  step:750, motion:true, cols:[[200,90,20],[120,20,20],[255,180,40],[90,60,20]]},
+  {name:"North Pole Chase",      cat:"Holidays", holiday:"Christmas",       season:"Winter", pattern:"chase", bandWidth:4, step:200, motion:true, cols:[[220,20,30],[20,140,40],[255,255,255]]},
+  {name:"Christmas Twinkle Wave",cat:"Holidays", holiday:"Christmas",       season:"Winter", pattern:"wave",  step:550, motion:true, cols:[[220,20,30],[20,140,40],[255,215,0],[255,255,255]]},
+  {name:"Menorah Chase",         cat:"Holidays", holiday:"Hanukkah",        season:"Winter", pattern:"chase", bandWidth:3, step:210, motion:true, cols:[[30,80,200],[255,255,255]]},
+  {name:"Festival of Lights Wave",cat:"Holidays",holiday:"Hanukkah",        season:"Winter", pattern:"wave",  step:600, motion:true, cols:[[20,60,160],[80,140,255],[255,255,255]]},
+  {name:"Kwanzaa Chase",         cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"chase", bandWidth:4, step:230, motion:true, cols:[[200,20,20],[0,140,40]]},
+  {name:"Unity Wave",            cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"wave",  step:650, motion:true, cols:[[200,20,20],[0,0,0],[0,140,40]]},
 ];
 let libCat = "All";
 function renderLibFilter(){
@@ -502,14 +524,23 @@ function renderLibFilter(){
 }
 function renderLibrary(){
   const list = PRESETS.filter(p=>libCat==="All"||p.cat===libCat);
-  $("#glibrary").innerHTML = list.map((p,i)=>{
+  const grouped = libCat==="Holidays";   // group by season, sub-labeled by holiday
+  let lastSeason=null;
+  $("#glibrary").innerHTML = list.map((p)=>{
+    let header="";
+    if(grouped && p.season && p.season!==lastSeason){
+      header = `<div style="grid-column:1/-1;font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-.2px;
+        display:flex;align-items:center;gap:7px;margin:${lastSeason?'14px':'0'} 2px 2px">${SEASON_EMOJI[p.season]||''} ${p.season}</div>`;
+      lastSeason = p.season;
+    }
     const grad = p.cols.map(rgb).join(",");
     const badge = p.pattern ? `<span class="pill" style="position:absolute;top:8px;right:8px">${p.pattern==="wave"?"🌊":"💫"} ${p.pattern}</span>` : "";
-    return `<div class="card scell" style="position:relative" data-lib="${PRESETS.indexOf(p)}">
+    const subtitle = grouped ? (p.holiday||p.cat) : p.cat;
+    return header + `<div class="card scell" style="position:relative" data-lib="${PRESETS.indexOf(p)}">
       ${badge}
       <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
       <div style="font-weight:800;font-size:14px;margin-top:8px">${p.name}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:2px">${p.cat} · ${p.pattern?'segment movement':(p.motion?'moving':'static')}</div></div>`;
+      <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${p.pattern?'segment movement':(p.motion?'moving':'static')}</div></div>`;
   }).join("");
 }
 function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth}; }

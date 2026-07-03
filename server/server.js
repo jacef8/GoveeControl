@@ -222,7 +222,7 @@ async function runChase(id, count, cols, bandWidth, stepMs) {
     if (pos >= count - 1) { dir = -1; colorIdx++; } else if (pos <= 0) { dir = 1; colorIdx++; }
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(250, stepMs || 350));
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(180, stepMs || 300));
 }
 async function runWave(id, count, cols, stepMs) {
   stopSegAnim(id); await setPower(id, true).catch(() => {});
@@ -235,7 +235,57 @@ async function runWave(id, count, cols, stepMs) {
     phase = (phase + 1) % rgbs.length;
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(400, stepMs || 700));
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(280, stepMs || 550));
+}
+// STROBE: the whole strip hard-flashes between palette colors with a dark beat
+// in between (color -> off -> next color -> off...) — a real concert-style flash,
+// not a gentle fade. Cheap (1 call/tick) so it can run fast.
+async function runStrobe(id, count, cols, stepMs) {
+  stopSegAnim(id); await setPower(id, true).catch(() => {});
+  const rgbs = cols.map(rgbInt);
+  const all = Array.from({ length: count }, (_, i) => i);
+  let beat = 0, colorIdx = 0;
+  const tick = async () => {
+    if (beat % 2 === 0) { await segControl(id, all, rgbs[colorIdx % rgbs.length]).catch(() => {}); colorIdx++; }
+    else { await segControl(id, all, 0).catch(() => {}); }
+    beat++;
+  };
+  await tick();
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(110, stepMs || 150));
+}
+// BOUNCE: several comet bands (bandCount) run at once, evenly spaced, each its
+// own color, all ping-ponging together — a much busier, livelier chase.
+async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
+  stopSegAnim(id); await setPower(id, true).catch(() => {});
+  const rgbs = cols.map(rgbInt);
+  const bands = Math.max(2, Math.min(bandCount || 3, Math.max(2, Math.floor(count / 3))));
+  const width = Math.max(1, Math.min(bandWidth || 3, Math.floor(count / bands)));
+  const spacing = count / bands;
+  let on = new Set(), pos = 0, dir = 1, roundIdx = 0;
+  const tick = async () => {
+    const next = new Set();
+    const litColor = {};
+    for (let b = 0; b < bands; b++) {
+      const center = Math.round((pos + b * spacing) % count);
+      const color = rgbs[(roundIdx + b) % rgbs.length];
+      for (let i = 0; i < width; i++) {
+        const idx = center - Math.floor(width / 2) + i;
+        if (idx >= 0 && idx < count) { next.add(idx); litColor[idx] = color; }
+      }
+    }
+    const toDim = [...on].filter((i) => !next.has(i));
+    on = next;
+    // group newly/still-lit segments by color so each color needs just one call
+    const byColor = {};
+    next.forEach((i) => { (byColor[litColor[i]] ||= []).push(i); });
+    const calls = Object.entries(byColor).map(([c, segs]) => segControl(id, segs, +c).catch(() => {}));
+    if (toDim.length) calls.push(segControl(id, toDim, 0).catch(() => {}));
+    await Promise.allSettled(calls);
+    pos += dir;
+    if (pos >= count - 1) { dir = -1; roundIdx++; } else if (pos <= 0) { dir = 1; roundIdx++; }
+  };
+  await tick();
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(220, stepMs || 280));
 }
 app.post("/govee/segscene", gate, async (req, res) => {
   try {
@@ -244,11 +294,13 @@ app.post("/govee/segscene", gate, async (req, res) => {
     const targets = ids.filter((id) => deviceSegCount(id) > 0);
     if (!targets.length) return res.status(400).json({ error: "no segment-capable devices in the target list" });
     const cols = (req.body.cols && req.body.cols.length) ? req.body.cols : [[255, 0, 140], [0, 200, 255], [120, 255, 80]];
+    const { pattern, bandWidth, bandCount, step } = req.body;
     await Promise.all(targets.map((id) => {
       const count = deviceSegCount(id);
-      return req.body.pattern === "wave"
-        ? runWave(id, count, cols, req.body.step)
-        : runChase(id, count, cols, req.body.bandWidth, req.body.step);
+      if (pattern === "wave")   return runWave(id, count, cols, step);
+      if (pattern === "strobe") return runStrobe(id, count, cols, step);
+      if (pattern === "bounce") return runBounce(id, count, cols, bandWidth, bandCount, step);
+      return runChase(id, count, cols, bandWidth, step);
     }));
     res.json({ ok: true, targets });
   } catch (e) { res.status(502).json({ error: e.message }); }

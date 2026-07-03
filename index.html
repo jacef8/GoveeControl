@@ -146,6 +146,7 @@
   .bento{display:grid; grid-template-columns:1fr; gap:14px; grid-auto-flow:dense}
   @media (min-width:640px){ .bento{grid-template-columns:repeat(2,minmax(0,1fr))} .tile.wide{grid-column:span 2} }
   @media (min-width:1080px){ .bento{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  @media (min-width:1500px){ .bento{grid-template-columns:repeat(4,minmax(0,1fr))} .tile.wide{grid-column:span 2} }
   .tile{position:relative; display:flex; flex-direction:column; gap:13px; overflow:hidden;
     background:var(--sheen), var(--glass-tint); backdrop-filter:blur(var(--blur)) saturate(150%); -webkit-backdrop-filter:blur(var(--blur)) saturate(150%);
     border:1px solid var(--glass-border); border-radius:22px; padding:16px 17px;

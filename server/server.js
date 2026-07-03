@@ -32,6 +32,10 @@ const anthropic  = new Anthropic();   // reads ANTHROPIC_API_KEY
 // process — otherwise Railway reports a crash and restarts the whole service.
 process.on("unhandledRejection", (e) => console.error("unhandledRejection:", (e && e.message) || e));
 process.on("uncaughtException",  (e) => console.error("uncaughtException:",  (e && e.message) || e));
+// Railway sends SIGTERM to stop the OLD container on every redeploy — that's
+// expected, not a crash. Exit 0 explicitly so it's reported as a clean stop.
+process.on("SIGTERM", () => { console.log("SIGTERM received — shutting down cleanly"); process.exit(0); });
+process.on("SIGINT",  () => { console.log("SIGINT received — shutting down cleanly");  process.exit(0); });
 
 const app = express();
 app.use(express.json({ limit: "256kb" }));

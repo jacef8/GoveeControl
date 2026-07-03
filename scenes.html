@@ -432,15 +432,13 @@ function renderPreview(s){
       <div class="row" style="justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:6px"><span>Slower</span><span>Speed</span><span>Faster</span></div>
       <input type="range" id="pvspeed" min="0" max="100" value="${spd}">
     </div>
-    <div style="font-size:12px;color:var(--dim);margin-top:9px">${s.targets.length} lights · ${s.via}${s.motion?` · ${(s.step/1000).toFixed(1)}s/step`:""}</div>
+    <div style="font-size:12px;color:var(--dim);margin-top:9px">${s.via}${s.motion?` · ${(s.step/1000).toFixed(1)}s/step`:""}</div>
     <div class="row" style="margin-top:11px">
-      <button id="gapply" class="btn green">Apply now</button>
       <button id="gsave" class="btn">Save</button>
     </div></div>`;
   startPvAnim(s);
   $("#pvmotion").onclick=()=>{ s.motion=!s.motion; if(!s.motion){ s.step=0; } else if(!s.step){ s.step=1500; } renderPreview(s); };
   const spEl=$("#pvspeed"); if(spEl) spEl.oninput=()=>{ const v=+spEl.value; s.step=Math.max(300,Math.round(4000-(v/100)*3700)); startPvAnim(s); };
-  $("#gapply").onclick=(ev)=>{ flashEl(ev.currentTarget); openApplyPicker(s,"library"); };
   $("#gsave").onclick=(ev)=>{ flashEl(ev.currentTarget); addSaved(s); toast(`Saved "${s.name}"`); msg(`Saved "${s.name}"`); };
 }
 
@@ -734,7 +732,8 @@ function renderTriggers(){
 $("#ggen").onclick=async(ev)=>{ const p=$("#gp").value||"multicolored moving party";
   flashEl(ev&&ev.currentTarget); toast("Generating scene…"); msg("Generating scene…");
   const s=await designScene(p); renderPreview(s);
-  toast(`Generated "${s.name}"`); msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`); };
+  msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`);
+  openApplyPicker(s,"library"); };
 $("#gp").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#ggen").click(); } });
 $("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
 $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;

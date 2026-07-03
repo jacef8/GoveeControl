@@ -113,6 +113,13 @@
     box-shadow:0 5px 20px -5px rgba(120,110,255,.7), inset 0 1px 0 rgba(255,255,255,.22)}
   .stab:active{background:var(--glass-tint)}
   .tabpanel[hidden]{display:none}
+  /* apply-target picker (multi-select) */
+  .pickhdr{font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:#8a93b0; margin:16px 0 6px}
+  .pickrow{display:flex; align-items:center; gap:10px; padding:9px 4px; font-size:14px; cursor:pointer; border-radius:8px}
+  .pickrow:active{background:rgba(255,255,255,.06)}
+  .pickrow input[type=checkbox]{width:18px; height:18px; accent-color:var(--accent); flex:0 0 auto}
+  .pickrow span:first-of-type{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .pickcount{font-size:11.5px; color:#8a93b0}
 </style>
 </head>
 <body>
@@ -295,10 +302,102 @@ async function designScene(prompt){
   return {name:best.name,motion:best.motion,step:best.step,via:best.via,cols:best.cols,targets:LIGHTS.slice()};
 }
 async function applyScene(s){
-  s.targets = currentTargets();   // honor the "Apply to" selection
+  if(!s.targets || !s.targets.length) s.targets = currentTargets();   // honor the "Apply to" selection if not already set
   if(!CONFIG.USE_MOCK){ await fetch(CONFIG.PROXY_BASE+"/govee/scene",{method:"POST",
     headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify(s)}); }
   return true;
+}
+
+/* ============================================================
+   APPLY PICKER  — tapping a scene no longer applies immediately.
+   A popup lets you check any combination of groups/individual
+   lights (multi-select), then Apply sends it to exactly those.
+   ============================================================ */
+function openApplyPicker(scene, kind){
+  let ov = document.getElementById("applyOverlay");
+  if(!ov){
+    ov = document.createElement("div"); ov.id = "applyOverlay";
+    ov.style.cssText = "position:fixed;inset:0;z-index:170;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:18px";
+    ov.innerHTML = '<div id="applyCard" style="width:min(460px,94vw);max-height:84vh;overflow:auto;box-sizing:border-box;'
+      +'background:linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,0) 35%), rgba(21,19,31,.86);'
+      +'backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%);'
+      +'border:1px solid rgba(255,255,255,.15);border-radius:22px;padding:20px;color:#fff;'
+      +'box-shadow:0 24px 70px -20px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.13)"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e=>{ if(e.target===ov){ ov.style.display="none"; ov._sel=null; } });
+  }
+  ov._pending = {scene, kind}; ov._sel = null;
+  renderApplyPicker(); ov.style.display = "flex";
+}
+function renderApplyPicker(){
+  const ov=document.getElementById("applyOverlay"); if(!ov || !ov._pending) return;
+  const {scene} = ov._pending;
+  const card = document.getElementById("applyCard");
+  // seed the checked set from whatever's picked in the sticky "Apply to" bar, once
+  if(!ov._sel){
+    const pre = new Set();
+    if(sceneTarget==="all") DEVICES.forEach(d=>pre.add(d.device));
+    else if(sceneTarget.startsWith("grp:")){ const g=(SGROUPS||[]).find(x=>x.id===sceneTarget.slice(4)); (g?.devices||[]).forEach(id=>pre.add(id)); }
+    else if(sceneTarget.startsWith("dev:")) pre.add(sceneTarget.slice(4));
+    ov._sel = pre;
+  }
+  const sel = ov._sel;
+  const esc = s => (s||"").replace(/[<>"]/g, c=>({'<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const allChecked = DEVICES.length>0 && DEVICES.every(d=>sel.has(d.device));
+  const groupRows = (SGROUPS||[]).filter(g=>(g.devices||[]).length).map(g=>{
+    const ids=g.devices; const checked = ids.every(id=>sel.has(id));
+    return `<label class="pickrow"><input type="checkbox" data-pickgrp="${g.id}" ${checked?'checked':''}><span>${esc(g.name)}</span><span class="pickcount">${ids.length}</span></label>`;
+  }).join("");
+  const lightRows = DEVICES.map(d=>`<label class="pickrow"><input type="checkbox" data-pickdev="${d.device}" ${sel.has(d.device)?'checked':''}><span>${esc(d.deviceName)}</span></label>`).join("");
+  card.innerHTML =
+    `<div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:19px;font-weight:600;flex:1">Apply "${esc(scene.name)}"</h2><button id="apClose" style="border:0;background:transparent;color:#8a93b0;font-size:20px;cursor:pointer">✕</button></div>
+    <p style="margin:0 0 14px;color:#aab;font-size:12.5px;line-height:1.5">Check any lights or groups — pick as many as you like.</p>
+    <label class="pickrow" style="font-weight:700"><input type="checkbox" id="apAll" ${allChecked?'checked':''}><span>All lights</span></label>
+    ${groupRows ? '<div class="pickhdr">GROUPS</div>'+groupRows : ""}
+    <div class="pickhdr">LIGHTS</div>${lightRows || '<div style="color:#8a93b0;font-size:13px">No lights loaded.</div>'}
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button id="apCancel" class="btn" style="flex:1">Cancel</button>
+      <button id="apApply" class="btn blue" style="flex:1">Apply to ${sel.size} light${sel.size===1?'':'s'}</button>
+    </div>`;
+  const closeIt=()=>{ ov.style.display="none"; ov._sel=null; };
+  card.querySelector("#apClose").onclick=closeIt;
+  card.querySelector("#apCancel").onclick=closeIt;
+  card.querySelector("#apAll").onchange=(e)=>{ if(e.target.checked) DEVICES.forEach(d=>sel.add(d.device)); else sel.clear(); renderApplyPicker(); };
+  card.querySelectorAll("[data-pickgrp]").forEach(cb=>cb.onchange=()=>{
+    const g=(SGROUPS||[]).find(x=>x.id===cb.dataset.pickgrp); const ids=g?.devices||[];
+    if(cb.checked) ids.forEach(id=>sel.add(id)); else ids.forEach(id=>sel.delete(id)); renderApplyPicker(); });
+  card.querySelectorAll("[data-pickdev]").forEach(cb=>cb.onchange=()=>{
+    const id=cb.dataset.pickdev; if(cb.checked) sel.add(id); else sel.delete(id); renderApplyPicker(); });
+  card.querySelector("#apApply").onclick=async()=>{
+    if(!sel.size){ toast("Pick at least one light", true); return; }
+    const ids=[...sel]; ov.style.display="none"; ov._sel=null;
+    await executeApply(ov._pending.scene, ov._pending.kind, ids);
+  };
+}
+async function executeApply(scene, kind, ids){
+  const names = ids.map(id=>(DEVICES.find(d=>d.device===id)||{}).deviceName).filter(Boolean);
+  const label = ids.length===DEVICES.length && DEVICES.length>0 ? "all lights" : (ids.length===1 ? (names[0]||"1 light") : `${ids.length} lights`);
+  if(kind==="device"){
+    await activateBuiltin(scene, ids);
+    toast(`Applied "${scene.name}" to ${label}`); msg(`Applied built-in "${scene.name}" to ${label}`);
+    return;
+  }
+  if(scene.pattern){   // movement scene: segment-capable devices chase/wave, the rest fall back to a color cycle
+    const capable = ids.filter(id=>{ const d=DEVICES.find(x=>x.device===id); return d && deviceHasSegments(d); });
+    const plain = ids.filter(id=>!capable.includes(id));
+    const tasks=[];
+    if(capable.length) tasks.push(startSegScene(capable, scene.pattern, scene.cols, scene.step, scene.bandWidth));
+    if(plain.length){
+      const plainNames = plain.map(id=>(DEVICES.find(d=>d.device===id)||{}).deviceName).filter(Boolean);
+      tasks.push(applyScene({...scene, motion:true, targets:plainNames}));
+    }
+    await Promise.allSettled(tasks);
+    const note = capable.length && plain.length ? ` (${plain.length} without segments ran a color cycle instead)` : "";
+    toast(`Applied "${scene.name}" to ${label}${note}`); msg(`Applied "${scene.name}" to ${label}${note}`);
+    return;
+  }
+  await applyScene({...scene, targets:names});
+  toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
 }
 
 /* ---------- preview rendering ---------- */
@@ -341,7 +440,7 @@ function renderPreview(s){
   startPvAnim(s);
   $("#pvmotion").onclick=()=>{ s.motion=!s.motion; if(!s.motion){ s.step=0; } else if(!s.step){ s.step=1500; } renderPreview(s); };
   const spEl=$("#pvspeed"); if(spEl) spEl.oninput=()=>{ const v=+spEl.value; s.step=Math.max(300,Math.round(4000-(v/100)*3700)); startPvAnim(s); };
-  $("#gapply").onclick=async(ev)=>{ flashEl(ev.currentTarget); toast(`Applied "${s.name}" to ${targetLabel()}`); msg(`Applied "${s.name}" to ${targetLabel()}${s.motion?` · ${(s.step/1000).toFixed(1)}s/step`:""}`); await applyScene(s); };
+  $("#gapply").onclick=(ev)=>{ flashEl(ev.currentTarget); openApplyPicker(s,"library"); };
   $("#gsave").onclick=(ev)=>{ flashEl(ev.currentTarget); addSaved(s); toast(`Saved "${s.name}"`); msg(`Saved "${s.name}"`); };
 }
 
@@ -367,8 +466,17 @@ function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typ
 renderSaved();
 
 /* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
-const LIB_CATS = ["All","Party","Calm","Nature","Holiday"];
+const LIB_CATS = ["All","Movement","Party","Calm","Nature","Holiday"];
 const PRESETS = [
+  // "Movement" scenes animate UP AND DOWN individual strip segments (chase/wave)
+  // instead of just cycling the whole light's color — only runs on RGBIC strips
+  // that report segments; other lights fall back to a plain color cycle.
+  {name:"Comet Chase",   cat:"Movement", pattern:"chase", bandWidth:4, step:220, motion:true, cols:[[0,220,255],[255,255,255]]},
+  {name:"Fire Runner",   cat:"Movement", pattern:"chase", bandWidth:5, step:180, motion:true, cols:[[255,60,0],[255,160,20]]},
+  {name:"Double Comet",  cat:"Movement", pattern:"chase", bandWidth:3, step:150, motion:true, cols:[[255,0,140],[0,220,255],[255,220,0]]},
+  {name:"Rainbow Runner",cat:"Movement", pattern:"wave", step:550, motion:true, cols:[[255,0,0],[255,140,0],[255,230,0],[0,200,60],[0,140,255],[160,60,255]]},
+  {name:"Ocean Wave",    cat:"Movement", pattern:"wave", step:650, motion:true, cols:[[0,90,200],[0,180,180],[0,220,160]]},
+  {name:"Candy Cane Chase",cat:"Movement", pattern:"chase", bandWidth:4, step:200, motion:true, cols:[[230,20,30],[255,255,255]]},
   {name:"Party Pulse",  cat:"Party", motion:true, step:1000, cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
   {name:"Disco",        cat:"Party", motion:true, step:700,  cols:[[255,0,0],[255,140,0],[255,255,0],[0,200,0],[0,120,255],[150,0,255]]},
   {name:"Neon City",    cat:"Party", motion:true, step:900,  cols:[[255,20,147],[0,255,255],[180,0,255],[255,0,90]]},
@@ -398,13 +506,15 @@ function renderLibrary(){
   const list = PRESETS.filter(p=>libCat==="All"||p.cat===libCat);
   $("#glibrary").innerHTML = list.map((p,i)=>{
     const grad = p.cols.map(rgb).join(",");
-    return `<div class="card scell" data-lib="${PRESETS.indexOf(p)}">
+    const badge = p.pattern ? `<span class="pill" style="position:absolute;top:8px;right:8px">${p.pattern==="wave"?"🌊":"💫"} ${p.pattern}</span>` : "";
+    return `<div class="card scell" style="position:relative" data-lib="${PRESETS.indexOf(p)}">
+      ${badge}
       <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
       <div style="font-weight:800;font-size:14px;margin-top:8px">${p.name}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:2px">${p.cat} · ${p.motion?'moving':'static'}</div></div>`;
+      <div style="font-size:11px;color:var(--dim);margin-top:2px">${p.cat} · ${p.pattern?'segment movement':(p.motion?'moving':'static')}</div></div>`;
   }).join("");
 }
-function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:currentTargets(), cols:p.cols}; }
+function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth}; }
 
 /* ---------- device built-in scenes (smooth, hardware-run) ---------- */
 async function getBuiltinScenes(){
@@ -418,12 +528,20 @@ async function getBuiltinScenes(){
     body:JSON.stringify({device:DEVICES[0].device})});
   return (await r.json()).data || [];
 }
-async function activateBuiltin(s){
+async function activateBuiltin(s, ids){
   if(CONFIG.USE_MOCK) return true;
-  const targets = DEVICES.length ? DEVICES.map(d=>d.device) : [];
+  const targets = ids && ids.length ? ids : (DEVICES.length ? DEVICES.map(d=>d.device) : []);
   await Promise.all(targets.map(device=> fetch(CONFIG.PROXY_BASE+"/govee/scene/builtin",{method:"POST",
     headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
     body:JSON.stringify({device, value:s.value, instance:s.instance})})));
+  return true;
+}
+// does this device expose addressable segments? (RGBIC strips)
+function deviceHasSegments(d){ return (d.capabilities||[]).some(c=>c.type==="devices.capabilities.segment_color_setting"); }
+async function startSegScene(ids, pattern, cols, step, bandWidth){
+  if(CONFIG.USE_MOCK) return true;
+  await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",headers:phdr(),
+    body:JSON.stringify({devices:ids, pattern, cols, step, bandWidth})});
   return true;
 }
 // The Cloud API gives built-in scenes as name+id only (no colors), so we infer a
@@ -639,10 +757,10 @@ $("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team
 document.addEventListener("click", async e=>{
   const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
   const sdel=e.target.closest("[data-savedel]"); if(sdel){ e.stopPropagation(); const nm=SAVED[+sdel.dataset.savedel]?.name; delSaved(+sdel.dataset.savedel); toast(`Removed "${nm||'scene'}"`); return; }
-  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); ack(sv,`Applied "${s.name}" to ${targetLabel()}`); renderPreview(s); await applyScene(s); return; }
+  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); flashEl(sv); renderPreview(s); openApplyPicker(s,"saved"); return; }
   const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; renderLibFilter(); renderLibrary(); return; }
-  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); ack(lb,`Applied "${p.name}" to ${targetLabel()}`); renderPreview(s); await applyScene(s); return; }
-  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); ack(bi,`Applied "${s.name}" to ${targetLabel()}`); await activateBuiltin(s); return; }
+  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); flashEl(lb); renderPreview(s); openApplyPicker(s,"library"); return; }
+  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); flashEl(bi); openApplyPicker(s,"device"); return; }
   const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
   const trd=e.target.closest("[data-trdel]"); if(trd){ const id=trd.dataset.trdel; const ev=(TRIGGERS.find(x=>x.id===id)||{}).event; await trigDel(id); renderTriggers(); msg(`Removed trigger "${ev}"`); return; }
   const tg=e.target.closest("[data-tog]"); if(tg){ const id=tg.dataset.tog; const a=AUTO.find(x=>x.id===id); if(!a)return;

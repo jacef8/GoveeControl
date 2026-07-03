@@ -170,8 +170,90 @@ app.post("/govee/scene", gate, async (req, res) => {
 });
 app.post("/govee/stop", gate, (_req, res) => {
   if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  Object.keys(segAnimTimers).forEach(stopSegAnim);
   res.json({ ok: true });
 });
+
+/* ============================================================
+   SEGMENT SCENES  ("movement up and down the strand")
+   Only runs on devices that report segment_color_setting (RGBIC
+   strips). Two patterns:
+   - "chase": a lit band of `bandWidth` segments sweeps back and
+     forth (ping-pong), like a Knight Rider / comet effect.
+   - "wave": segments are bucketed into `cols.length` color groups
+     that rotate position each tick — a flowing barber-pole.
+   Each tick sends only 1-2 control calls per device regardless of
+   segment count, to stay rate-limit friendly.
+   ============================================================ */
+let segAnimTimers = {};   // deviceId -> interval handle, independent per device
+function stopSegAnim(id) { if (segAnimTimers[id]) { clearInterval(segAnimTimers[id]); delete segAnimTimers[id]; } }
+function deviceSegCount(id) {
+  const d = deviceMap[id]; if (!d) return 0;
+  const cap = (d.capabilities || []).find((c) => c.type === "devices.capabilities.segment_color_setting");
+  if (!cap) return 0;
+  const f = (cap.parameters?.fields || []).find((x) => /segment/i.test(x.fieldName || ""));
+  return (f?.size?.max) || (f?.elementRange?.max != null ? f.elementRange.max + 1 : 0) || 15;
+}
+async function segControl(id, segs, rgb) {
+  const sku = await resolveSku(id);
+  return govee("/device/control", {
+    requestId: randomUUID(),
+    payload: { sku, device: id, capability: { type: "devices.capabilities.segment_color_setting", instance: "segmentedColorRgb", value: { segment: segs, rgb } } },
+  });
+}
+async function runChase(id, count, cols, bandWidth, stepMs) {
+  stopSegAnim(id); await setPower(id, true).catch(() => {});
+  const rgbs = cols.map(rgbInt);
+  let on = new Set(), pos = 0, dir = 1, colorIdx = 0;
+  const width = Math.max(1, Math.min(bandWidth || 3, count));
+  const tick = async () => {
+    const next = new Set();
+    for (let i = 0; i < width; i++) { const idx = pos - Math.floor(width / 2) + i; if (idx >= 0 && idx < count) next.add(idx); }
+    const toLight = [...next].filter((i) => !on.has(i));
+    const toDim = [...on].filter((i) => !next.has(i));
+    on = next;
+    if (toLight.length) await segControl(id, toLight, rgbs[colorIdx % rgbs.length]).catch(() => {});
+    if (toDim.length) await segControl(id, toDim, 0).catch(() => {});
+    pos += dir;
+    if (pos >= count - 1) { dir = -1; colorIdx++; } else if (pos <= 0) { dir = 1; colorIdx++; }
+  };
+  await tick();
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(250, stepMs || 350));
+}
+async function runWave(id, count, cols, stepMs) {
+  stopSegAnim(id); await setPower(id, true).catch(() => {});
+  const rgbs = cols.map(rgbInt);
+  let phase = 0;
+  const tick = async () => {
+    const groups = rgbs.map(() => []);
+    for (let i = 0; i < count; i++) groups[(i + phase) % rgbs.length].push(i);
+    await Promise.allSettled(groups.map((segs, i) => (segs.length ? segControl(id, segs, rgbs[i]) : null)));
+    phase = (phase + 1) % rgbs.length;
+  };
+  await tick();
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(400, stepMs || 700));
+}
+app.post("/govee/segscene", gate, async (req, res) => {
+  try {
+    if (!Object.keys(deviceMap).length) await listDevices();
+    const ids = req.body.devices || [];
+    const targets = ids.filter((id) => deviceSegCount(id) > 0);
+    if (!targets.length) return res.status(400).json({ error: "no segment-capable devices in the target list" });
+    const cols = (req.body.cols && req.body.cols.length) ? req.body.cols : [[255, 0, 140], [0, 200, 255], [120, 255, 80]];
+    await Promise.all(targets.map((id) => {
+      const count = deviceSegCount(id);
+      return req.body.pattern === "wave"
+        ? runWave(id, count, cols, req.body.step)
+        : runChase(id, count, cols, req.body.bandWidth, req.body.step);
+    }));
+    res.json({ ok: true, targets });
+  } catch (e) { res.status(502).json({ error: e.message }); }
+});
+app.post("/govee/segscene/stop", gate, (req, res) => {
+  (req.body.devices || Object.keys(segAnimTimers)).forEach(stopSegAnim);
+  res.json({ ok: true });
+});
+
 // Flash a light (or all) N times in a color, then restore. Reuses flash() below.
 app.post("/govee/flash", gate, async (req, res) => {
   try {

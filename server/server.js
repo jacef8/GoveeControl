@@ -296,6 +296,30 @@ async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
   await tick();
   segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(220, stepMs || 280));
 }
+// Shared by the live /govee/segscene route AND scheduled/triggered scenes
+// (runAction, IFTTT) so a segment pattern behaves identically either way.
+function dispatchSegPattern(id, count, cols, pattern, bandWidth, bandCount, step) {
+  if (pattern === "wave")   return runWave(id, count, cols, step);
+  if (pattern === "strobe") return runStrobe(id, count, cols, step);
+  if (pattern === "bounce") return runBounce(id, count, cols, bandWidth, bandCount, step);
+  return runChase(id, count, cols, bandWidth, step);
+}
+// Apply a full scene object (as designed/saved in the app) to a set of device
+// ids: segment-capable ones get the real chase/wave/strobe/bounce pattern,
+// the rest fall back to a whole-device color cycle — same split the Scenes
+// page's apply picker does, but driven server-side (for cron/IFTTT firing).
+async function applySceneToIds(scene, ids) {
+  if (!ids.length) return;
+  if (scene.pattern) {
+    const capable = ids.filter((id) => deviceSegCount(id) > 0);
+    const plain = ids.filter((id) => !capable.includes(id));
+    const tasks = capable.map((id) => dispatchSegPattern(id, deviceSegCount(id), scene.cols, scene.pattern, scene.bandWidth, scene.bandCount, scene.step));
+    if (plain.length) tasks.push(applyScene({ ...scene, targets: plain.map((id) => deviceMap[id]?.deviceName).filter(Boolean) }));
+    await Promise.allSettled(tasks);
+  } else {
+    await applyScene({ ...scene, targets: ids.map((id) => deviceMap[id]?.deviceName).filter(Boolean) });
+  }
+}
 app.post("/govee/segscene", gate, async (req, res) => {
   try {
     if (!Object.keys(deviceMap).length) await listDevices();
@@ -304,13 +328,7 @@ app.post("/govee/segscene", gate, async (req, res) => {
     if (!targets.length) return res.status(400).json({ error: "no segment-capable devices in the target list" });
     const cols = (req.body.cols && req.body.cols.length) ? req.body.cols : [[255, 0, 140], [0, 200, 255], [120, 255, 80]];
     const { pattern, bandWidth, bandCount, step } = req.body;
-    await Promise.all(targets.map((id) => {
-      const count = deviceSegCount(id);
-      if (pattern === "wave")   return runWave(id, count, cols, step);
-      if (pattern === "strobe") return runStrobe(id, count, cols, step);
-      if (pattern === "bounce") return runBounce(id, count, cols, bandWidth, bandCount, step);
-      return runChase(id, count, cols, bandWidth, step);
-    }));
+    await Promise.all(targets.map((id) => dispatchSegPattern(id, deviceSegCount(id), cols, pattern, bandWidth, bandCount, step)));
     res.json({ ok: true, targets });
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
@@ -480,9 +498,8 @@ async function runAction(action) {
     if (action.color != null)      await Promise.allSettled(ids.map((id) => setColor(id, action.color)));
     return;
   }
-  if (action.kind === "scene" && action.scene) {
-    const s = store.find((a) => a.action?.kind === "scene" && a.label === action.scene);
-    if (s?.action?.scene && typeof s.action.scene === "object") return applyScene(s.action.scene);
+  if (action.kind === "scene" && action.scene && typeof action.scene === "object") {
+    return applySceneToIds(action.scene, ids);
   }
 }
 

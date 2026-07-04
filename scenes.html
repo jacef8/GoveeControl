@@ -755,6 +755,13 @@ async function loadSGroups(){
   const sel=$("#gschgrp");
   if(sel) sel.innerHTML='<option value="">All lights</option>'+SGROUPS.map(g=>`<option value="${g.id}">${g.name}</option>`).join("");
 }
+function actionSummary(action){
+  if(!action) return "?";
+  if(action.kind==="allOff") return "Off";
+  if(action.kind==="allOn") return action.brightness!=null ? `On · ${action.brightness}%` : "On";
+  if(action.kind==="scene" && action.scene) return `🎬 ${action.scene.name||"Scene"}`;
+  return "?";
+}
 async function renderAuto(){
   AUTO = await autoList();
   const el=$("#gauto");
@@ -763,11 +770,82 @@ async function renderAuto(){
     const en = s.enabled!==false && s.on!==false;
     const tgt = s.action?.groupId ? (SGROUPS.find(g=>g.id===s.action.groupId)?.name || "group") : "all lights";
     return `<div class="arow">
-      <div style="flex:1"><div style="font-weight:800;font-size:15px">${s.label||"Automation"}</div>
-        <div style="font-size:12px;color:var(--dim);margin-top:2px">${s.when||s.cron||""} · ${tgt}</div></div>
+      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">${s.label||"Automation"}</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px">${s.when||s.cron||""} · ${tgt} · ${actionSummary(s.action)}</div></div>
       <div class="sw ${en?'on':''}" data-tog="${s.id}"><span class="k"></span></div>
-      <button class="ex" data-audel="${s.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:8px">✕</button></div>`;
+      <button class="ex" data-auedit="${s.id}" style="margin-left:8px">✏️</button>
+      <button class="ex" data-audel="${s.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:6px">✕</button></div>`;
   }).join("");
+}
+/* ---------- edit an existing timer: change the time and/or the action ---------- */
+function actionToSelectValue(action){
+  if(!action) return "allon";
+  if(action.kind==="allOff") return "alloff";
+  if(action.kind==="allOn") return "allon";
+  if(action.kind==="scene" && action.scene){
+    const nm=action.scene.name;
+    const pi=PRESETS.findIndex(p=>p.name===nm); if(pi>=0) return "scene:"+pi;
+    const si=SAVED.findIndex(s=>s.name===nm); if(si>=0) return "saved:"+si;
+  }
+  return "allon";
+}
+function autoActOptionsHTML(){
+  let h='<option value="allon">Turn on</option><option value="alloff">Turn off</option>';
+  if(PRESETS && PRESETS.length) h+='<optgroup label="Scenes">'+PRESETS.map((p,i)=>`<option value="scene:${i}">🎬 ${p.name}</option>`).join("")+'</optgroup>';
+  if(SAVED && SAVED.length) h+='<optgroup label="Saved scenes">'+SAVED.map((s,i)=>`<option value="saved:${i}">⭐ ${s.name}</option>`).join("")+'</optgroup>';
+  return h;
+}
+function openEditAuto(auto){
+  let ov=document.getElementById("autoEditOverlay");
+  if(!ov){
+    ov=document.createElement("div"); ov.id="autoEditOverlay";
+    ov.style.cssText="position:fixed;inset:0;z-index:180;display:none;align-items:center;justify-content:center;background:rgba(4,6,18,.62);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:18px";
+    ov.innerHTML='<div id="autoEditCard" style="width:min(440px,94vw);max-height:84vh;overflow:auto;box-sizing:border-box;'
+      +'background:linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,0) 35%), rgba(21,19,31,.86);'
+      +'backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%);'
+      +'border:1px solid rgba(255,255,255,.15);border-radius:22px;padding:20px;color:#fff;'
+      +'box-shadow:0 24px 70px -20px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.13)"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e=>{ if(e.target===ov) ov.style.display="none"; });
+  }
+  const card=document.getElementById("autoEditCard");
+  const esc=s=>(s||"").replace(/[<>"]/g, c=>({'<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const groupOpts='<option value="">All lights</option>'+(SGROUPS||[]).map(g=>`<option value="${g.id}" ${g.id===auto.action?.groupId?'selected':''}>${esc(g.name)}</option>`).join("");
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:19px;font-weight:600;flex:1">Edit timer</h2><button id="aeClose" style="border:0;background:transparent;color:#8a93b0;font-size:20px;cursor:pointer">✕</button></div>
+    <label style="display:block;font-size:12px;color:#ccd;margin:14px 0 6px">Time</label>
+    <input id="aeWhen" value="${esc(auto.when)}" placeholder="off at 11pm" style="width:100%;box-sizing:border-box;padding:11px 13px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">
+    <div style="font-size:11.5px;color:#8a93b0;margin-top:6px">Change this text to move the time — re-parsed when you save. Leave it as-is to keep the time and just change the action below.</div>
+    <label style="display:block;font-size:12px;color:#ccd;margin:16px 0 6px">Lights</label>
+    <select id="aeGroup" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">${groupOpts}</select>
+    <label style="display:block;font-size:12px;color:#ccd;margin:16px 0 6px">Action</label>
+    <select id="aeAction" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#fff;font-size:14px">${autoActOptionsHTML()}</select>
+    <div id="aeMsg" style="min-height:16px;font-size:12px;margin:10px 2px 4px;color:#9aa"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button id="aeCancel" class="btn" style="flex:1">Cancel</button>
+      <button id="aeSave" class="btn blue" style="flex:1">Save</button>
+    </div>`;
+  card.querySelector("#aeAction").value=actionToSelectValue(auto.action);
+  const close=()=>ov.style.display="none";
+  card.querySelector("#aeClose").onclick=close;
+  card.querySelector("#aeCancel").onclick=close;
+  card.querySelector("#aeSave").onclick=async()=>{
+    const msgEl=card.querySelector("#aeMsg");
+    const newWhen=card.querySelector("#aeWhen").value.trim();
+    const groupId=card.querySelector("#aeGroup").value||undefined;
+    const actSel=card.querySelector("#aeAction").value;
+    const action=buildAction(actSel); if(groupId) action.groupId=groupId;
+    const patch={action};
+    if(newWhen && newWhen!==auto.when){
+      msgEl.textContent="Parsing new time…";
+      const sched=await parseSchedule(newWhen);
+      patch.when=sched.when; patch.cron=sched.cron; patch.label=sched.label||auto.label;
+    }
+    await autoPatch(auto.id, patch);
+    close(); await renderAuto();
+    toast("Timer updated"); msg("Timer updated");
+  };
+  ov.style.display="flex";
 }
 async function parseSchedule(text){
   if(!CONFIG.USE_MOCK){ const r=await fetch(CONFIG.PROXY_BASE+"/ai/schedule",{method:"POST",
@@ -915,6 +993,7 @@ document.addEventListener("click", async e=>{
     const en=!(a.enabled!==false && a.on!==false); a.enabled=en; await autoPatch(id,{enabled:en}); await renderAuto();
     msg((a.label||"Automation")+(en?" enabled":" paused")); return; }
   const aud=e.target.closest("[data-audel]"); if(aud){ const id=aud.dataset.audel; await autoDel(id); await renderAuto(); msg("Automation removed"); return; }
+  const aue=e.target.closest("[data-auedit]"); if(aue){ const a=AUTO.find(x=>x.id===aue.dataset.auedit); if(a) openEditAuto(a); return; }
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
 function applyTimerHash(){

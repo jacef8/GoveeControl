@@ -1008,7 +1008,24 @@ async function renderGroupsModal(){
   });
 })();
 
-if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+/* ---------- auto-update: reload once a new deploy is actually live ----------
+   A cache-first service worker means a plain refresh normally just re-serves
+   the SAME cached page — browsers only check for a new sw.js occasionally in
+   the background, and even then, the new one doesn't take over until it's
+   explicitly claimed. So: force an update check on load + whenever the tab
+   regains focus, and the moment the new worker takes control, reload once
+   automatically so the update actually shows up instead of silently sitting
+   there until you happen to trigger a fresh-enough navigation. */
+if("serviceWorker" in navigator){
+  let refreshedOnce=false;
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+    if(refreshedOnce) return; refreshedOnce=true; location.reload();
+  });
+  navigator.serviceWorker.register("sw.js").then(reg=>{
+    reg.update().catch(()=>{});
+    document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
+  }).catch(()=>{});
+}
 </script>
 </body>
 </html>

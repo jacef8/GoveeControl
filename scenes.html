@@ -1021,7 +1021,19 @@ $("#gbright").oninput=()=>{ const v=+$("#gbright").value; $("#gbrightval").textC
   });
 })();
 
-if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+/* ---------- auto-update: reload once a new deploy is actually live ----------
+   See index.html for the full explanation: force an update check on load +
+   on tab focus, and auto-reload once the new worker actually takes control. */
+if("serviceWorker" in navigator){
+  let refreshedOnce=false;
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+    if(refreshedOnce) return; refreshedOnce=true; location.reload();
+  });
+  navigator.serviceWorker.register("sw.js").then(reg=>{
+    reg.update().catch(()=>{});
+    document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) reg.update().catch(()=>{}); });
+  }).catch(()=>{});
+}
 </script>
 </body>
 </html>

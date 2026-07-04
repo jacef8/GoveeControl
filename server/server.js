@@ -54,6 +54,15 @@ app.use((req, res, next) => {
    and the API routes below. Static files are matched first; anything that
    isn't a file (e.g. /health, /govee/*) falls through to the routes. */
 const STATIC_DIR = fileURLToPath(new URL("..", import.meta.url));
+// Never let the browser (or an intermediate proxy/CDN) cache the service
+// worker or the HTML shell — otherwise a deploy can go live but the app
+// keeps serving a stale cached page even after the user refreshes.
+app.use((req, res, next) => {
+  if (/^\/(sw\.js|index\.html|scenes\.html|manifest\.json)?$/.test(req.path)) {
+    res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+  }
+  next();
+});
 app.use(express.static(STATIC_DIR));
 
 const gate = (req, res, next) => {

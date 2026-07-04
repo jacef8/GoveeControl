@@ -177,7 +177,12 @@
 
       <div class="scenes-browse">
       <div class="sttl" style="margin-top:0">Scene library</div>
-      <div id="glibfilter" class="row" style="margin-bottom:11px"></div>
+      <div id="glibfilter" class="row" style="margin-bottom:9px"></div>
+      <div class="row" style="margin-bottom:11px;gap:8px">
+        <select id="libmotion" title="Filter by movement" style="flex:1;min-width:110px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px"></select>
+        <select id="libcolor" title="Filter by color" style="flex:1;min-width:110px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px"></select>
+        <select id="libholiday" title="Jump to a holiday" style="flex:1;min-width:130px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px;display:none"></select>
+      </div>
       <div id="glibrary" class="saved"></div>
 
       <div class="sttl">Device scenes <span style="color:#6f7ea3;font-weight:700;text-transform:none;letter-spacing:0">· built into your lights</span></div>
@@ -396,11 +401,21 @@ function renderApplyPicker(){
     await executeApply(ov._pending.scene, ov._pending.kind, ids);
   };
 }
+// Records which devices are running an ongoing scene/animation (localStorage,
+// shared with index.html) — so the dashboard + light panel can show "running a
+// scene" honestly instead of a stale/misleading static color. markScene with
+// pattern=null clears the record (a genuinely static, one-time color).
+function markScene(ids, name, pattern){
+  let a={}; try{ a=JSON.parse(localStorage.getItem("gv_active_scene")||"{}"); }catch{}
+  ids.forEach(id=>{ if(pattern) a[id]={name,pattern,ts:Date.now()}; else delete a[id]; });
+  localStorage.setItem("gv_active_scene", JSON.stringify(a));
+}
 async function executeApply(scene, kind, ids){
   const names = ids.map(id=>(DEVICES.find(d=>d.device===id)||{}).deviceName).filter(Boolean);
   const label = ids.length===DEVICES.length && DEVICES.length>0 ? "all lights" : (ids.length===1 ? (names[0]||"1 light") : `${ids.length} lights`);
   if(kind==="device"){
     await activateBuiltin(scene, ids);
+    markScene(ids, scene.name, "builtin");
     toast(`Applied "${scene.name}" to ${label}`); msg(`Applied built-in "${scene.name}" to ${label}`);
     return;
   }
@@ -414,11 +429,14 @@ async function executeApply(scene, kind, ids){
       tasks.push(applyScene({...scene, motion:true, targets:plainNames}));
     }
     await Promise.allSettled(tasks);
+    markScene(capable, scene.name, scene.pattern);
+    markScene(plain, scene.name, "cycle");
     const note = capable.length && plain.length ? ` (${plain.length} without segments ran a color cycle instead)` : "";
     toast(`Applied "${scene.name}" to ${label}${note}`); msg(`Applied "${scene.name}" to ${label}${note}`);
     return;
   }
   await applyScene({...scene, targets:names});
+  markScene(ids, scene.name, scene.motion ? "cycle" : null);   // motion:false = a fixed color, not an ongoing scene
   toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
 }
 
@@ -499,6 +517,39 @@ renderSaved();
 const LIB_CATS = ["All","Movement","Party","Calm","Nature","Holidays"];
 const SEASON_EMOJI = {Winter:"❄️", Spring:"🌸", Summer:"☀️", Fall:"🍂"};
 const PATTERN_EMOJI = {chase:"💫", wave:"🌊", strobe:"⚡", bounce:"🎆"};
+const MOTION_TYPES = ["All","Solid","Cycle","Chase","Wave","Strobe","Bounce"];
+// motion classification: a segment pattern, a whole-device color cycle, or a fixed static look
+function motionType(p){
+  if(p.pattern) return p.pattern[0].toUpperCase()+p.pattern.slice(1);   // chase/wave/strobe/bounce
+  return p.motion ? "Cycle" : "Solid";
+}
+const COLOR_FAMILIES = ["All","Red","Orange","Yellow","Green","Blue","Purple/Pink","White","Multicolor"];
+function rgbToHsl(r,g,b){ r/=255; g/=255; b/=255; const mx=Math.max(r,g,b), mn=Math.min(r,g,b); const l=(mx+mn)/2; let h=0,s=0;
+  const d=mx-mn;
+  if(d!==0){ s = l>0.5 ? d/(2-mx-mn) : d/(mx+mn);
+    if(mx===r) h=((g-b)/d)%6; else if(mx===g) h=(b-r)/d+2; else h=(r-g)/d+4;
+    h*=60; if(h<0) h+=360; }
+  return {h,s,l};
+}
+// classify a scene's dominant color family from its palette, for browsing/filtering
+function colorFamily(cols){
+  const hsls = cols.map(([r,g,b])=>rgbToHsl(r,g,b));
+  const sat = hsls.filter(c=>c.s>0.15);
+  if(!sat.length) return "White";
+  if(sat.length>=3){   // wide hue spread across several saturated colors = a rainbow/multicolor look
+    const hues=sat.map(c=>c.h).sort((a,b)=>a-b);
+    let maxGap=360-(hues[hues.length-1]-hues[0]);
+    for(let i=1;i<hues.length;i++) maxGap=Math.max(maxGap, hues[i]-hues[i-1]);
+    if(360-maxGap>140) return "Multicolor";
+  }
+  const h=sat[0].h;
+  if(h<15||h>=345) return "Red";
+  if(h<45) return "Orange";
+  if(h<70) return "Yellow";
+  if(h<170) return "Green";
+  if(h<255) return "Blue";
+  return "Purple/Pink";
+}
 const PRESETS = [
   // "Movement" scenes animate UP AND DOWN individual strip segments (chase/wave)
   // instead of just cycling the whole light's color — only runs on RGBIC strips
@@ -567,14 +618,29 @@ const PRESETS = [
   {name:"Unity Wave",            cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"wave",  step:380, motion:true, cols:[[200,20,20],[0,0,0],[0,140,40]]},
   {name:"Unity Bounce",          cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"bounce",bandWidth:2, bandCount:3, step:250, motion:true, cols:[[200,20,20],[0,140,40]]},
 ];
-let libCat = "All";
+let libCat = "All", libMotion = "All", libColor = "All", libHoliday = "All";
 function renderLibFilter(){
   $("#glibfilter").innerHTML = LIB_CATS.map(c=>
     `<button class="ex" data-libcat="${c}" style="${c===libCat?'border-color:var(--accent);color:#9bb4ff;background:#13203f':''}">${c}</button>`).join("");
 }
+function renderLib2(){
+  const ms=$("#libmotion"), cs=$("#libcolor"), hs=$("#libholiday");
+  if(ms) ms.innerHTML = MOTION_TYPES.map(m=>`<option value="${m}" ${m===libMotion?'selected':''}>${m==="All"?"Any movement":m}</option>`).join("");
+  if(cs) cs.innerHTML = COLOR_FAMILIES.map(c=>`<option value="${c}" ${c===libColor?'selected':''}>${c==="All"?"Any color":c}</option>`).join("");
+  if(hs){
+    const holidays = ["All", ...new Set(PRESETS.filter(p=>p.cat==="Holidays").map(p=>p.holiday))];
+    hs.style.display = libCat==="Holidays" ? "" : "none";
+    hs.innerHTML = holidays.map(h=>`<option value="${h}" ${h===libHoliday?'selected':''}>${h==="All"?"Every holiday":h}</option>`).join("");
+  }
+}
 function renderLibrary(){
-  const list = PRESETS.filter(p=>libCat==="All"||p.cat===libCat);
+  const list = PRESETS.filter(p=>
+    (libCat==="All"||p.cat===libCat) &&
+    (libMotion==="All"||motionType(p)===libMotion) &&
+    (libColor==="All"||colorFamily(p.cols)===libColor) &&
+    (libCat!=="Holidays"||libHoliday==="All"||p.holiday===libHoliday));
   const grouped = libCat==="Holidays";   // group by season, sub-labeled by holiday
+  if(!list.length){ $("#glibrary").innerHTML='<div style="grid-column:1/-1;color:var(--dim);font-size:13px;padding:10px 2px">No scenes match these filters.</div>'; return; }
   let lastSeason=null;
   $("#glibrary").innerHTML = list.map((p)=>{
     let header="";
@@ -584,13 +650,15 @@ function renderLibrary(){
       lastSeason = p.season;
     }
     const grad = p.cols.map(rgb).join(",");
-    const badge = p.pattern ? `<span class="pill" style="position:absolute;top:8px;right:8px">${PATTERN_EMOJI[p.pattern]||"💫"} ${p.pattern}</span>` : "";
+    const mtype = motionType(p);
+    const badge = p.pattern ? `<span class="pill" style="position:absolute;top:8px;right:8px">${PATTERN_EMOJI[p.pattern]||"💫"} ${mtype}</span>`
+                : `<span class="pill" style="position:absolute;top:8px;right:8px;opacity:.85">${mtype==="Cycle"?"🔄":"⬤"} ${mtype}</span>`;
     const subtitle = grouped ? (p.holiday||p.cat) : p.cat;
     return header + `<div class="card scell" style="position:relative" data-lib="${PRESETS.indexOf(p)}">
       ${badge}
       <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
       <div style="font-weight:800;font-size:14px;margin-top:8px">${p.name}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${p.pattern?'segment movement':(p.motion?'moving':'static')}</div></div>`;
+      <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${colorFamily(p.cols)}</div></div>`;
   }).join("");
 }
 function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth, bandCount:p.bandCount}; }
@@ -838,7 +906,7 @@ document.addEventListener("click", async e=>{
   const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
   const sdel=e.target.closest("[data-savedel]"); if(sdel){ e.stopPropagation(); const nm=SAVED[+sdel.dataset.savedel]?.name; delSaved(+sdel.dataset.savedel); toast(`Removed "${nm||'scene'}"`); return; }
   const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); flashEl(sv); renderPreview(s); openApplyPicker(s,"saved"); return; }
-  const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; renderLibFilter(); renderLibrary(); return; }
+  const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; libHoliday="All"; renderLibFilter(); renderLib2(); renderLibrary(); return; }
   const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); flashEl(lb); renderPreview(s); openApplyPicker(s,"library"); return; }
   const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); flashEl(bi); openApplyPicker(s,"device"); return; }
   const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
@@ -867,7 +935,10 @@ function showTab(name){
 }
 document.querySelectorAll(".stab[data-tab]").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 showTab( location.hash.includes("tgt=") ? "timers" : ((location.hash.match(/#(scenes|timers|triggers)/)||[])[1] || "scenes") );
-renderLibFilter(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
+renderLibFilter(); renderLib2(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
+$("#libmotion").onchange=()=>{ libMotion=$("#libmotion").value; renderLibrary(); };
+$("#libcolor").onchange=()=>{ libColor=$("#libcolor").value; renderLibrary(); };
+$("#libholiday").onchange=()=>{ libHoliday=$("#libholiday").value; renderLibrary(); };
 $("#gtarget").onchange=()=>{ sceneTarget=$("#gtarget").value;
   if(lastScene){ lastScene.targets=currentTargets(); renderPreview(lastScene); }
   const opt=$("#gtarget").selectedOptions[0]; msg("Scenes apply to: "+(opt?opt.textContent:"All lights")); };

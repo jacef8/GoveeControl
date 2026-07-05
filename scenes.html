@@ -426,7 +426,11 @@ async function executeApply(scene, kind, ids){
     if(capable.length) tasks.push(startSegScene(capable, scene.pattern, scene.cols, scene.step, scene.bandWidth, scene.bandCount));
     if(plain.length){
       const plainNames = plain.map(id=>(DEVICES.find(d=>d.device===id)||{}).deviceName).filter(Boolean);
-      tasks.push(applyScene({...scene, motion:true, targets:plainNames}));
+      // strip near-black entries — several strobe/bounce palettes intentionally include
+      // [0,0,0] as a segment "off" beat, which on a WHOLE-DEVICE cycle just reads as the
+      // light turning fully off each tick ("just flashes on and off"), not real movement.
+      const litCols = scene.cols.filter(([r,g,b])=>r+g+b>30);
+      tasks.push(applyScene({...scene, motion:true, cols:litCols.length?litCols:scene.cols, targets:plainNames}));
     }
     await Promise.allSettled(tasks);
     markScene(capable, scene.name, scene.pattern);

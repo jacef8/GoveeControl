@@ -231,6 +231,10 @@
   .ld-act:active{transform:scale(.96)}
   .ld-act:disabled{opacity:.4; cursor:not-allowed}
   .ld-dim{color:var(--ink-faint); font-size:13px; margin-top:8px}
+  .ld-debug{margin-top:18px; padding-top:2px}
+  .ld-debug summary{cursor:pointer; font-size:12.5px; color:var(--ink-faint); font-weight:600; list-style:none}
+  .ld-debug summary::-webkit-details-marker{display:none}
+  .ld-debug[open] summary{color:var(--ink-2); margin-bottom:2px}
   .scenechips{display:flex; flex-wrap:wrap; gap:8px; margin-top:2px}
   .scenechip{border:1px solid var(--glass-border); background:var(--sheen), var(--glass-tint); color:var(--ink);
     font:600 13px 'Inter',system-ui; padding:8px 13px; border-radius:11px; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
@@ -582,15 +586,19 @@ app.addEventListener("click", e=>{
   const gtog = e.target.closest("[data-grptoggle]");
   if(gtog){ const name=gtog.dataset.grptoggle; const online=DEVICES.filter(d=>d.room===name && d.online);
     const want = !online.some(d=>d._state.on);   // any on -> turn all off, else all on
-    online.forEach(d=>{ d._state.on=want; touch(d); Govee.setPower(d.device,want).catch(()=>{}); });
-    render(); toast(`${name}: all ${want?'on':'off'}`); return;
+    online.forEach(d=>{ d._state.on=want; touch(d); });
+    render(); toast(`${name}: all ${want?'on':'off'}`);
+    Promise.allSettled(online.map(d=>Govee.setPower(d.device,want))).then(rs=>reportGroupFailures(online,rs,name));
+    return;
   }
   const gcol = e.target.closest("[data-grpcolor]");
   if(gcol){ const v=+gcol.dataset.grpcolor; const name=gcol.dataset.grp;
     const roomDevs=DEVICES.filter(d=>d.room===name && d.online);
     stopSceneFor(roomDevs.map(d=>d.device));
-    roomDevs.forEach(d=>{ d._state.color=v; touch(d); Govee.setColor(d.device,v).catch(()=>{}); });
-    render(); toast(`${name}: color set`); return;
+    roomDevs.forEach(d=>{ d._state.color=v; touch(d); });
+    render(); toast(`${name}: color set`);
+    Promise.allSettled(roomDevs.map(d=>Govee.setColor(d.device,v))).then(rs=>reportGroupFailures(roomDevs,rs,name));
+    return;
   }
 });
 app.addEventListener("input", e=>{
@@ -616,7 +624,8 @@ app.addEventListener("input", e=>{
     if(!gbri._t) stopSceneFor(roomDevs.map(d=>d.device));
     roomDevs.forEach(d=>{ d._state.brightness=v; touch(d); });
     clearTimeout(gbri._t); gbri._t=setTimeout(()=>{
-      gbri._t=null; roomDevs.forEach(d=>Govee.setBright(d.device,v).catch(()=>{}));
+      gbri._t=null;
+      Promise.allSettled(roomDevs.map(d=>Govee.setBright(d.device,v))).then(rs=>reportGroupFailures(roomDevs,rs,name));
     },250); // debounce while dragging the group slider
   }
   const gpick = e.target.closest("[data-grppick]");
@@ -625,7 +634,8 @@ app.addEventListener("input", e=>{
     if(!gpick._t) stopSceneFor(roomDevs.map(d=>d.device));
     roomDevs.forEach(d=>{ d._state.color=v; touch(d); });
     clearTimeout(gpick._t); gpick._t=setTimeout(()=>{
-      gpick._t=null; roomDevs.forEach(d=>Govee.setColor(d.device,v).catch(()=>{}));
+      gpick._t=null;
+      Promise.allSettled(roomDevs.map(d=>Govee.setColor(d.device,v))).then(rs=>reportGroupFailures(roomDevs,rs,name));
     },180);
   }
 });
@@ -641,6 +651,12 @@ document.querySelector("header").addEventListener("click", e=>{
 });
 const byId = id => DEVICES.find(d=>d.device===id);
 const touch = d => { if(d) d._touched = Date.now(); };   // mark as just-changed (poll won't clobber for 15s)
+// Group/bulk actions were silently swallowing per-device failures (.catch(()=>{})),
+// so "2 of 3 lights respond" had no visible cause. This reports which ones failed.
+function reportGroupFailures(devs, results, label){
+  const failed = results.map((r,i)=>r.status==="rejected"?devs[i]:null).filter(Boolean);
+  if(failed.length) toast(`${label}: ${failed.length} of ${devs.length} light${devs.length===1?'':'s'} didn't respond (${failed.map(d=>d.deviceName).join(", ")})`, true);
+}
 
 /* ============================================================
    ACTIVE SCENE TRACKING — the Scenes page writes here whenever it starts
@@ -773,6 +789,23 @@ function segInfo(d){
     count=(f?.size?.max) || (f?.elementRange?.max!=null ? f.elementRange.max+1 : 0); }catch{}
   return {supported:true, count: count||15};
 }
+// Raw diagnostics: what Govee's API actually reports for this device — so
+// "why doesn't light X respond" is answerable by looking at real data instead
+// of guessing (online status per Govee, actual capability list, segment count).
+function debugSection(d,seg){
+  const caps = (d.capabilities||[]).map(c=>c.type.replace("devices.capabilities.","")).join(", ") || "(none reported)";
+  const rows = [
+    ["Device ID", d.device],
+    ["SKU / model", d.sku||"?"],
+    ["Govee reports online", d.online ? "yes" : "no — commands are skipped for offline lights"],
+    ["Capabilities", caps],
+    ["Segment support", seg.supported ? `yes, ${seg.count} segments` : "no — movement scenes fall back to a color cycle on this light"],
+  ];
+  return `<details class="ld-debug"><summary>🔧 Debug info</summary>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">
+      ${rows.map(([k,v])=>`<tr><td style="padding:4px 8px 4px 0;color:var(--ink-faint);white-space:nowrap;vertical-align:top">${k}</td><td style="padding:4px 0;word-break:break-word">${v}</td></tr>`).join("")}
+    </table></details>`;
+}
 function renderLightDetail(){
   const ov=document.getElementById("liteOverlay"); if(!ov) return;
   const d=byId(ov.dataset.dev); const card=document.getElementById("liteCard"); if(!d) return;
@@ -804,7 +837,7 @@ function renderLightDetail(){
     (sc==null) ? `<div class="ld-dim">Loading scenes…</div>`
     : (sc.length ? `<div class="scenechips">`+sc.map((s,i)=>`<button class="scenechip" data-ldscene="${i}" ${d.online?'':'disabled'}>${s.name}</button>`).join("")+`</div>`
        : `<div class="ld-dim">No built-in scenes for this light.</div>`) ) + `</div>`;
-  card.innerHTML = head + runningBanner + wholeBody(d) + segSection + sceneSection;
+  card.innerHTML = head + runningBanner + wholeBody(d) + segSection + sceneSection + debugSection(d,seg);
   const q=s=>card.querySelector(s);
   q("[data-ldclose]").onclick=closeLight;
   q("[data-pwr]").onclick=()=>{ if(!d.online) return toast("Light is offline",true); const nx=!d._state.on; d._state.on=nx; Govee.setPower(d.device,nx).catch(()=>{}); render(); renderLightDetail(); };

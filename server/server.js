@@ -15,6 +15,10 @@ const PASSCODE      = process.env.PASSCODE || "";            // shared secret th
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";   // for /ai/* (SDK reads it too)
 const LAT           = process.env.LAT ? Number(process.env.LAT) : null;  // for "sunset" schedules
 const LON           = process.env.LON ? Number(process.env.LON) : null;
+// Railway's containers run in UTC by default — without an explicit timezone,
+// every clock-time automation ("off at 11pm") fires 4-5 hours off from a US
+// Eastern user's actual local time, which reads as "timers aren't followed."
+const TZ            = process.env.TZ_NAME || "America/New_York";
 const MODEL         = "claude-opus-4-8";
 
 // Where the JSON stores live. Railway's container disk is EPHEMERAL — set
@@ -72,7 +76,8 @@ const gate = (req, res, next) => {
 };
 
 app.get("/health", (_req, res) =>
-  res.json({ ok: true, govee: !!GOVEE_KEY, ai: !!ANTHROPIC_KEY, automations: store.length, dataDir: DATA_DIR }));
+  res.json({ ok: true, govee: !!GOVEE_KEY, ai: !!ANTHROPIC_KEY, automations: store.length, dataDir: DATA_DIR,
+    tz: TZ, serverTime: new Date().toISOString(), serverLocalTime: new Date().toLocaleString("en-US", { timeZone: TZ }) }));
 
 /* ============================================================
    GOVEE CLOUD API
@@ -525,15 +530,15 @@ async function scheduleOne(a) {
     return;
   }
   if (cron.validate(a.cron)) {
-    jobs.set(a.id, cron.schedule(a.cron, () => runAction(a.action).catch(() => {})));
+    jobs.set(a.id, cron.schedule(a.cron, () => runAction(a.action).catch(() => {}), { timezone: TZ }));
   }
 }
 function rescheduleAll() { store.forEach(scheduleOne); }
 
-// Re-arm sun-based one-shots every day just after midnight.
+// Re-arm sun-based one-shots every day just after midnight (local time).
 cron.schedule("10 0 * * *", () => {
   store.filter((a) => a.cron === "sunset" || a.cron === "sunrise").forEach(scheduleOne);
-});
+}, { timezone: TZ });
 
 app.get("/automations", gate, (_req, res) => res.json({ data: store }));
 app.post("/automations", gate, async (req, res) => {

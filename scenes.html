@@ -69,10 +69,16 @@
   .scell:active{transform:scale(.98)}
   .bar{height:34px; border-radius:10px; overflow:hidden}
   .pill{font-size:12px; padding:3px 10px; border-radius:8px; border:1px solid color-mix(in srgb,var(--accent) 40%,transparent); color:var(--accent); background:var(--accent-soft)}
-  .arow{display:flex; align-items:center; gap:11px; border:1px solid var(--glass-border-soft); border-radius:16px;
-    background:linear-gradient(160deg, rgba(255,255,255,.09), rgba(255,255,255,.015) 45%, transparent 75%), var(--glass-tint-soft);
+  /* the list is ONE bordered container (.listbox below); each item is a flat
+     divided row inside it, not its own separate floating card */
+  #gauto, #gtrig{border:1px solid var(--glass-border-soft); border-radius:16px;
+    background:linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.01) 45%, transparent 75%), var(--glass-tint-soft);
     backdrop-filter:blur(var(--blur)); -webkit-backdrop-filter:blur(var(--blur));
-    padding:13px 15px; margin-bottom:10px; box-shadow:var(--shadow-card), inset 0 1px 0 rgba(255,255,255,.1)}
+    padding:2px 15px; box-shadow:var(--shadow-card), inset 0 1px 0 rgba(255,255,255,.08)}
+  #gauto:empty, #gtrig:empty{display:none}
+  .arow{display:flex; align-items:center; gap:11px; border-bottom:1px solid var(--glass-border-soft);
+    padding:13px 2px; margin-bottom:0}
+  .arow:last-child{border-bottom:0}
   .sw{width:54px;height:32px;border-radius:16px;border:1px solid var(--glass-border);background:var(--sheen), var(--glass-tint);
     backdrop-filter:blur(var(--blur)); -webkit-backdrop-filter:blur(var(--blur));
     position:relative;cursor:pointer;flex:0 0 auto;transition:.25s; box-shadow:inset 0 1px 3px rgba(0,0,0,.25)}

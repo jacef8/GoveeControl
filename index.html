@@ -208,12 +208,10 @@
   /* ---------- light detail sheet ---------- */
   .sw.lon{background:color-mix(in srgb,var(--on) 22%,var(--surface)); border-color:color-mix(in srgb,var(--on) 55%,transparent)}
   .sw.lon .knob{left:27px; background:var(--on)}
-  /* each control type gets its own distinct, clearly-labeled glass card */
-  .ld-card{background:linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,.015) 45%, transparent 75%), var(--glass-tint-soft);
-    backdrop-filter:blur(var(--blur)); -webkit-backdrop-filter:blur(var(--blur));
-    border:1px solid var(--glass-border-soft); border-radius:18px; padding:16px 17px; margin-top:14px;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.09)}
-  .ld-card:first-of-type{margin-top:20px}
+  /* one continuous sheet: each control type is a plain row divided by a hairline,
+     not a separate floating box — the panel is one thing, not a pile of things */
+  .ld-card{border-top:1px solid var(--glass-border-soft); padding:16px 0; margin-top:0}
+  .ld-card:first-of-type{border-top:0; padding-top:8px}
   .ld-hdr2{display:flex; align-items:center; gap:9px; font-size:12px; font-weight:700; letter-spacing:.5px;
     text-transform:uppercase; color:var(--ink-faint); margin-bottom:14px}
   .ld-hdr2 .ico{font-size:16px; line-height:1}
@@ -231,7 +229,7 @@
   .ld-act:active{transform:scale(.96)}
   .ld-act:disabled{opacity:.4; cursor:not-allowed}
   .ld-dim{color:var(--ink-faint); font-size:13px; margin-top:8px}
-  .ld-debug{margin-top:18px; padding-top:2px}
+  .ld-debug{border-top:1px solid var(--glass-border-soft); margin-top:0; padding:16px 0 4px}
   .ld-debug summary{cursor:pointer; font-size:12.5px; color:var(--ink-faint); font-weight:600; list-style:none}
   .ld-debug summary::-webkit-details-marker{display:none}
   .ld-debug[open] summary{color:var(--ink-2); margin-bottom:2px}
@@ -258,10 +256,12 @@
   .snapchip button{border:0; background:transparent; color:var(--ink); font:600 13px 'Inter',system-ui; padding:8px 11px; cursor:pointer}
   .snapchip .snapx{color:var(--ink-faint); padding:8px 9px; border-left:1px solid var(--glass-border-soft)}
   .ld-head{display:flex; align-items:center; gap:11px; margin-bottom:4px; padding-bottom:16px; border-bottom:1px solid var(--glass-border-soft)}
-  /* banner: this light's color comes from a running scene, not a fixed pick */
-  .ld-running{display:flex; align-items:center; gap:11px; margin-top:16px; padding:13px 15px; border-radius:16px;
-    background:linear-gradient(160deg, rgba(138,123,255,.28), rgba(138,123,255,.08) 60%);
-    border:1px solid rgba(138,123,255,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+  /* banner: this light's color comes from a running scene, not a fixed pick.
+     an accent left-edge on a flat row (not another floating box) — it's still
+     part of the same continuous sheet, just visually flagged as a status note */
+  .ld-running{display:flex; align-items:center; gap:11px; padding:13px 15px 13px 13px;
+    background:linear-gradient(90deg, rgba(138,123,255,.16), transparent 70%);
+    border-left:3px solid rgba(138,123,255,.7)}
   .ld-running-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto;
     background:conic-gradient(#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); animation:scenespin 3s linear infinite}
   .ld-name{font-size:17px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}

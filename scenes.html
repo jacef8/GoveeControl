@@ -45,6 +45,14 @@
   main{flex:1 1 auto; overflow:auto; padding:18px}
   .sttl{font-size:17px; font-weight:700; color:var(--ink); margin:26px 2px 13px; display:flex; align-items:center; gap:8px; letter-spacing:-.3px}
   .sttl:first-child{margin-top:6px}
+  /* a little decoration for the AI-creations section — gradient heading + a
+     glowing accent border on each tile, so your own AI scenes stand apart
+     from re-saved library presets at a glance */
+  .ai-scenes-hdr{background:linear-gradient(90deg,#b66bff,#4f7cff,#39d98a); -webkit-background-clip:text; background-clip:text; color:transparent}
+  #gaiscenes:empty::after{content:"Generate a scene above, then tap Save — it lands here, kept apart from the library."; display:block; color:var(--dim); font-size:13px; padding:2px 2px 6px}
+  .card.ai-scene{border-color:color-mix(in srgb,#b66bff 45%,var(--glass-border-soft) 55%); box-shadow:var(--shadow-card), inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px color-mix(in srgb,#b66bff 25%,transparent)}
+  .ai-badge{position:absolute; top:8px; left:8px; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:8px;
+    background:linear-gradient(90deg,#b66bff,#4f7cff); color:#fff}
   textarea,input,select{background:var(--glass-tint); border:1px solid var(--glass-border); border-radius:12px; color:var(--ink); font:15px 'Inter',system-ui; padding:12px 14px; width:100%; outline:none}
   textarea::placeholder,input::placeholder{color:var(--ink-faint)}
   textarea:focus,input:focus,select:focus{border-color:var(--accent); background:var(--glass-tint-soft)}
@@ -179,6 +187,9 @@
       </div>
       <div id="gchips" class="row" style="margin-top:9px"></div>
       <div id="gpreview" style="margin-top:13px"></div>
+
+      <div class="sttl ai-scenes-hdr">✨ Your AI scenes</div>
+      <div id="gaiscenes" class="saved"></div>
       </div>
 
       <div class="scenes-browse">
@@ -507,17 +518,32 @@ let SAVED=[];
 function loadSaved(){ try{ const r=localStorage.getItem("gv_saved"); SAVED=r?JSON.parse(r):[]; }catch{ SAVED=[]; } if(!Array.isArray(SAVED)) SAVED=[]; }
 function saveSavedStore(){ try{ localStorage.setItem("gv_saved", JSON.stringify(SAVED)); }catch{} }
 loadSaved();
-function renderSaved(){
-  const el=$("#gsaved"); if(!el) return;
-  if(!SAVED.length){ el.innerHTML='<div style="color:var(--dim);font-size:13px;padding:4px 2px">No saved scenes yet. Generate or pick a scene, then tap <b>Save</b> — it stays here (and in the timer &amp; trigger pickers).</div>'; return; }
-  el.innerHTML = SAVED.map((s,i)=>{
+// Renders a list of saved scenes into `el`. Each tile's data-act/data-savedel
+// use the item's TRUE index in the full SAVED array (via SAVED.indexOf), not
+// its position in this filtered subset — both #gaiscenes and #gsaved draw
+// from the same SAVED array, so a naive per-list index would point at the
+// wrong scene once the array holds a mix of both.
+function savedGridHTML(list, isAi){
+  if(!list.length) return "";
+  return list.map(s=>{
+    const i = SAVED.indexOf(s);
     const grad=s.cols.map(rgb).join(",");
-    return `<div class="card scell" data-act="${i}">
+    const badge = isAi ? '<span class="ai-badge">✨ AI</span>' : "";
+    return `<div class="card scell ${isAi?'ai-scene':''}" data-act="${i}">
+      ${badge}
       <button class="ex" data-savedel="${i}" title="Delete" style="position:absolute;top:6px;right:6px;padding:2px 8px;border-color:#6e2f2f;color:#ff8a8a;z-index:2">✕</button>
       <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
       <div style="font-weight:800;font-size:14px;margin-top:8px">${s.name}</div>
       <div style="font-size:11px;color:var(--dim);margin-top:2px">${s.motion?"moving":"static"} · tap to apply</div></div>`;
   }).join("");
+}
+function renderSaved(){
+  const aiEl=$("#gaiscenes"), el=$("#gsaved"); if(!el) return;
+  const aiScenes = SAVED.filter(s=>s.origin==="ai");
+  const others = SAVED.filter(s=>s.origin!=="ai");
+  if(aiEl) aiEl.innerHTML = savedGridHTML(aiScenes, true);   // empty state handled by #gaiscenes:empty::after CSS
+  el.innerHTML = others.length ? savedGridHTML(others, false)
+    : '<div style="color:var(--dim);font-size:13px;padding:4px 2px">No saved scenes yet. Pick a library scene, then tap <b>Save</b> — it stays here (and in the timer &amp; trigger pickers).</div>';
 }
 function addSaved(s){ SAVED=SAVED.filter(x=>x.name!==s.name); SAVED.unshift(s); if(SAVED.length>12) SAVED.pop(); saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs(); }
 function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs(); }
@@ -671,7 +697,7 @@ function renderLibrary(){
       <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${colorFamily(p.cols)}</div></div>`;
   }).join("");
 }
-function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth, bandCount:p.bandCount}; }
+function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", origin:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth, bandCount:p.bandCount}; }
 
 /* ---------- device built-in scenes (smooth, hardware-run) ---------- */
 async function getBuiltinScenes(){
@@ -968,7 +994,7 @@ function renderTriggers(){
 }
 $("#ggen").onclick=async(ev)=>{ const p=$("#gp").value||"multicolored moving party";
   flashEl(ev&&ev.currentTarget); toast("Generating scene…"); msg("Generating scene…");
-  const s=await designScene(p); renderPreview(s);
+  const s=await designScene(p); s.origin="ai"; renderPreview(s);
   msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`);
   openApplyPicker(s,"library"); };
 $("#gp").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#ggen").click(); } });

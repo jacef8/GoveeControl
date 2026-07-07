@@ -309,27 +309,32 @@ async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
 // in and out of sync, like fairy lights, instead of a uniform strobe/cycle.
 async function runTwinkle(id, count, cols, stepMs) {
   stopSegAnim(id); await setPower(id, true).catch(() => {});
-  const zones = Math.min(6, Math.max(3, Math.round(count / 3)));
+  const zones = Math.min(4, Math.max(2, Math.round(count / 4)));   // fewer zones = fewer commands per tick
   const floor = 0.12;      // never fully dark — a glow, not an off
-  const cycleSteps = 22;   // ticks per full breath — keeps the fade slow & smooth
-  let phase = 0;
+  const cycleSteps = 16;   // ticks for ONE full breath (dim->bright->dim)
+  let phase = 0, busy = false;
   const zoneSegs = Array.from({ length: zones }, () => []);
   for (let i = 0; i < count; i++) zoneSegs[Math.floor((i * zones) / count)].push(i);
   const tick = async () => {
-    phase = (phase + 1) % cycleSteps;
-    const calls = zoneSegs.map((segs, z) => {
-      if (!segs.length) return null;
-      const local = (phase + Math.round((z * cycleSteps) / zones)) % cycleSteps;
-      const t = local / cycleSteps;
-      const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
-      const base = cols[z % cols.length];
-      const rgb = rgbInt(base.map((c) => Math.round(c * factor)));
-      return segControl(id, segs, rgb).catch(() => {});
-    }).filter(Boolean);
-    return Promise.allSettled(calls);
+    if (busy) return; busy = true;
+    try {
+      phase = (phase + 1) % cycleSteps;
+      // sequential, not Promise.all — firing several segmentedColorRgb calls to
+      // the SAME device at once risks the cloud coalescing/dropping all but one,
+      // which reads as the light freezing at a single brightness ("static").
+      for (let z = 0; z < zones; z++) {
+        const segs = zoneSegs[z]; if (!segs.length) continue;
+        const local = (phase + Math.round((z * cycleSteps) / zones)) % cycleSteps;
+        const t = local / cycleSteps;
+        const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
+        const base = cols[z % cols.length];
+        const rgb = rgbInt(base.map((c) => Math.round(c * factor)));
+        await segControl(id, segs, rgb).catch(() => {});
+      }
+    } finally { busy = false; }
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(150, stepMs || 220));
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(400, stepMs || 500));
 }
 // Whole-device twinkle/breathe fallback for lights that AREN'T addressable
 // (no segments): fades the actual brightness capability slowly up and down
@@ -340,14 +345,17 @@ function stopBreathe(id) { if (breatheTimers[id]) { clearInterval(breatheTimers[
 async function runBreatheWhole(id, rgb, stepMs) {
   stopBreathe(id); await setPower(id, true).catch(() => {});
   await setColor(id, rgbInt(rgb)).catch(() => {});
-  const floorB = 8, cycleSteps = 16;               // brightness 1-100, ~16 steps per half-breath
-  const step = Math.max(700, stepMs || 900);
-  let phase = 0;
+  const floorB = 10, cycleSteps = 18;   // ticks for ONE full breath (dim->bright->dim)
+  const step = Math.max(350, stepMs || 400);
+  let phase = 0, busy = false;
   const tick = async () => {
-    phase = (phase + 1) % (cycleSteps * 2);
-    const t = phase / (cycleSteps * 2);
-    const b = Math.round(floorB + (100 - floorB) * (1 - Math.cos(t * 2 * Math.PI)) / 2);
-    await setBright(id, b).catch(() => {});
+    if (busy) return; busy = true;
+    try {
+      phase = (phase + 1) % cycleSteps;
+      const t = phase / cycleSteps;
+      const b = Math.round(floorB + (100 - floorB) * (1 - Math.cos(t * 2 * Math.PI)) / 2);
+      await setBright(id, b).catch(() => {});
+    } finally { busy = false; }
   };
   await tick();
   breatheTimers[id] = setInterval(() => tick().catch(() => {}), step);

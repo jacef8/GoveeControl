@@ -492,7 +492,7 @@ function startPvAnim(s){
     return;
   }
   if(s.pattern==="twinkle"){   // preview a real slow brightness fade, staggered per cell — not a color cycle
-    const cells=[...strip.children], n=cells.length||1, cycleSteps=22, floor=0.12;
+    const cells=[...strip.children], n=cells.length||1, cycleSteps=16, floor=0.12;
     let phase=0;
     anim=setInterval(()=>{
       phase=(phase+1)%cycleSteps;
@@ -503,7 +503,7 @@ function startPvAnim(s){
         const base=s.cols[i%s.cols.length];
         sp.style.background=`rgb(${Math.round(base[0]*factor)},${Math.round(base[1]*factor)},${Math.round(base[2]*factor)})`;
       });
-    }, Math.max(120, s.step||220));
+    }, Math.max(350, s.step||420));
     return;
   }
   let off=0;
@@ -627,9 +627,9 @@ const PRESETS = [
   // breathe up/down on a staggered cosine ramp, like fairy lights. Also the one
   // Movement pattern that gracefully works on non-addressable lights (whole-device
   // brightness breathe instead of per-segment).
-  {name:"Twinkle Glow",   cat:"Movement", pattern:"twinkle", step:280, motion:true, cols:[[255,214,140],[255,180,90],[255,140,60]]},
-  {name:"Soft Breathe",   cat:"Movement", pattern:"twinkle", step:340, motion:true, cols:[[120,180,255],[80,140,255],[180,210,255]]},
-  {name:"Starlight Twinkle",cat:"Movement",pattern:"twinkle", step:260, motion:true, cols:[[255,255,255],[210,225,255],[160,200,255]]},
+  {name:"Twinkle Glow",   cat:"Movement", pattern:"twinkle", step:420, motion:true, cols:[[255,214,140],[255,180,90],[255,140,60]]},
+  {name:"Soft Breathe",   cat:"Movement", pattern:"twinkle", step:460, motion:true, cols:[[120,180,255],[80,140,255],[180,210,255]]},
+  {name:"Starlight Twinkle",cat:"Movement",pattern:"twinkle", step:400, motion:true, cols:[[255,255,255],[210,225,255],[160,200,255]]},
   {name:"Party Pulse",  cat:"Party", motion:true, step:1000, cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
   {name:"Disco",        cat:"Party", motion:true, step:700,  cols:[[255,0,0],[255,140,0],[255,255,0],[0,200,0],[0,120,255],[150,0,255]]},
   {name:"Neon City",    cat:"Party", motion:true, step:900,  cols:[[255,20,147],[0,255,255],[180,0,255],[255,0,90]]},

@@ -189,6 +189,7 @@ app.post("/govee/scene", gate, async (req, res) => {
 app.post("/govee/stop", gate, (_req, res) => {
   if (animTimer) { clearInterval(animTimer); animTimer = null; }
   Object.keys(segAnimTimers).forEach(stopSegAnim);
+  Object.keys(breatheTimers).forEach(stopBreathe);
   res.json({ ok: true });
 });
 
@@ -301,25 +302,80 @@ async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
   await tick();
   segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(220, stepMs || 280));
 }
+// TWINKLE: a genuine slow brightness FADE (not a hard on/off cut) — the strip
+// is split into a handful of zones, each holding a fixed color from the
+// palette but breathing its own brightness up/down on a staggered phase
+// (cosine ramp, floored so it glows rather than blinking off) so zones drift
+// in and out of sync, like fairy lights, instead of a uniform strobe/cycle.
+async function runTwinkle(id, count, cols, stepMs) {
+  stopSegAnim(id); await setPower(id, true).catch(() => {});
+  const zones = Math.min(6, Math.max(3, Math.round(count / 3)));
+  const floor = 0.12;      // never fully dark — a glow, not an off
+  const cycleSteps = 22;   // ticks per full breath — keeps the fade slow & smooth
+  let phase = 0;
+  const zoneSegs = Array.from({ length: zones }, () => []);
+  for (let i = 0; i < count; i++) zoneSegs[Math.floor((i * zones) / count)].push(i);
+  const tick = async () => {
+    phase = (phase + 1) % cycleSteps;
+    const calls = zoneSegs.map((segs, z) => {
+      if (!segs.length) return null;
+      const local = (phase + Math.round((z * cycleSteps) / zones)) % cycleSteps;
+      const t = local / cycleSteps;
+      const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
+      const base = cols[z % cols.length];
+      const rgb = rgbInt(base.map((c) => Math.round(c * factor)));
+      return segControl(id, segs, rgb).catch(() => {});
+    }).filter(Boolean);
+    return Promise.allSettled(calls);
+  };
+  await tick();
+  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(150, stepMs || 220));
+}
+// Whole-device twinkle/breathe fallback for lights that AREN'T addressable
+// (no segments): fades the actual brightness capability slowly up and down
+// via a cosine ramp, instead of the color-cycle used by other patterns —
+// this is the real fix for "sharp brightness change, not a slow glowing fade."
+let breatheTimers = {};   // deviceId -> interval handle, independent per device
+function stopBreathe(id) { if (breatheTimers[id]) { clearInterval(breatheTimers[id]); delete breatheTimers[id]; } }
+async function runBreatheWhole(id, rgb, stepMs) {
+  stopBreathe(id); await setPower(id, true).catch(() => {});
+  await setColor(id, rgbInt(rgb)).catch(() => {});
+  const floorB = 8, cycleSteps = 16;               // brightness 1-100, ~16 steps per half-breath
+  const step = Math.max(700, stepMs || 900);
+  let phase = 0;
+  const tick = async () => {
+    phase = (phase + 1) % (cycleSteps * 2);
+    const t = phase / (cycleSteps * 2);
+    const b = Math.round(floorB + (100 - floorB) * (1 - Math.cos(t * 2 * Math.PI)) / 2);
+    await setBright(id, b).catch(() => {});
+  };
+  await tick();
+  breatheTimers[id] = setInterval(() => tick().catch(() => {}), step);
+}
 // Shared by the live /govee/segscene route AND scheduled/triggered scenes
 // (runAction, IFTTT) so a segment pattern behaves identically either way.
 function dispatchSegPattern(id, count, cols, pattern, bandWidth, bandCount, step) {
-  if (pattern === "wave")   return runWave(id, count, cols, step);
-  if (pattern === "strobe") return runStrobe(id, count, cols, step);
-  if (pattern === "bounce") return runBounce(id, count, cols, bandWidth, bandCount, step);
+  if (pattern === "wave")    return runWave(id, count, cols, step);
+  if (pattern === "strobe")  return runStrobe(id, count, cols, step);
+  if (pattern === "bounce")  return runBounce(id, count, cols, bandWidth, bandCount, step);
+  if (pattern === "twinkle") return runTwinkle(id, count, cols, step);
   return runChase(id, count, cols, bandWidth, step);
 }
 // Apply a full scene object (as designed/saved in the app) to a set of device
-// ids: segment-capable ones get the real chase/wave/strobe/bounce pattern,
-// the rest fall back to a whole-device color cycle — same split the Scenes
-// page's apply picker does, but driven server-side (for cron/IFTTT firing).
+// ids: segment-capable ones get the real chase/wave/strobe/bounce/twinkle
+// pattern, the rest fall back to a whole-device color cycle (or, for
+// twinkle, a whole-device brightness breathe) — same split the Scenes page's
+// apply picker does, but driven server-side (for cron/IFTTT firing).
 async function applySceneToIds(scene, ids) {
   if (!ids.length) return;
   if (scene.pattern) {
     const capable = ids.filter((id) => deviceSegCount(id) > 0);
     const plain = ids.filter((id) => !capable.includes(id));
     const tasks = capable.map((id) => dispatchSegPattern(id, deviceSegCount(id), scene.cols, scene.pattern, scene.bandWidth, scene.bandCount, scene.step));
-    if (plain.length) tasks.push(applyScene({ ...scene, targets: plain.map((id) => deviceMap[id]?.deviceName).filter(Boolean) }));
+    if (plain.length) {
+      if (scene.pattern === "twinkle") tasks.push(...plain.map((id) => runBreatheWhole(id, scene.cols[0], scene.step)));
+      else tasks.push(applyScene({ ...scene, targets: plain.map((id) => deviceMap[id]?.deviceName).filter(Boolean) }));
+    }
     await Promise.allSettled(tasks);
   } else {
     await applyScene({ ...scene, targets: ids.map((id) => deviceMap[id]?.deviceName).filter(Boolean) });
@@ -329,16 +385,30 @@ app.post("/govee/segscene", gate, async (req, res) => {
   try {
     if (!Object.keys(deviceMap).length) await listDevices();
     const ids = req.body.devices || [];
-    const targets = ids.filter((id) => deviceSegCount(id) > 0);
-    if (!targets.length) return res.status(400).json({ error: "no segment-capable devices in the target list" });
     const cols = (req.body.cols && req.body.cols.length) ? req.body.cols : [[255, 0, 140], [0, 200, 255], [120, 255, 80]];
     const { pattern, bandWidth, bandCount, step } = req.body;
+    // twinkle is the one pattern that ALSO works on non-addressable lights (a
+    // whole-device brightness breathe), so it doesn't require segment support.
+    if (pattern === "twinkle") {
+      const capable = ids.filter((id) => deviceSegCount(id) > 0);
+      const plain = ids.filter((id) => !capable.includes(id));
+      if (!capable.length && !plain.length) return res.status(400).json({ error: "no target devices" });
+      await Promise.all([
+        ...capable.map((id) => runTwinkle(id, deviceSegCount(id), cols, step)),
+        ...plain.map((id) => runBreatheWhole(id, cols[0], step)),
+      ]);
+      return res.json({ ok: true, targets: ids, capable, plain });
+    }
+    const targets = ids.filter((id) => deviceSegCount(id) > 0);
+    if (!targets.length) return res.status(400).json({ error: "no segment-capable devices in the target list" });
     await Promise.all(targets.map((id) => dispatchSegPattern(id, deviceSegCount(id), cols, pattern, bandWidth, bandCount, step)));
     res.json({ ok: true, targets });
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 app.post("/govee/segscene/stop", gate, (req, res) => {
-  (req.body.devices || Object.keys(segAnimTimers)).forEach(stopSegAnim);
+  const ids = req.body.devices || [...new Set([...Object.keys(segAnimTimers), ...Object.keys(breatheTimers)])];
+  ids.forEach(stopSegAnim);
+  ids.forEach(stopBreathe);
   res.json({ ok: true });
 });
 

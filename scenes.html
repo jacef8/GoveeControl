@@ -436,6 +436,12 @@ async function executeApply(scene, kind, ids){
     toast(`Applied "${scene.name}" to ${label}`); msg(`Applied built-in "${scene.name}" to ${label}`);
     return;
   }
+  if(scene.pattern==="twinkle"){   // twinkle handles segment-capable (per-segment breathe) AND whole-device (single breathe) server-side — one call covers everyone
+    await startSegScene(ids, "twinkle", scene.cols, scene.step, scene.bandWidth, scene.bandCount);
+    markScene(ids, scene.name, "twinkle");
+    toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
+    return;
+  }
   if(scene.pattern){   // movement scene: segment-capable devices chase/wave, the rest fall back to a color cycle
     const capable = ids.filter(id=>{ const d=DEVICES.find(x=>x.device===id); return d && deviceHasSegments(d); });
     const plain = ids.filter(id=>!capable.includes(id));
@@ -483,6 +489,21 @@ function startPvAnim(s){
       [...strip.children].forEach(sp=>sp.style.background=c);
       beat++;
     }, Math.max(90, s.step||150));
+    return;
+  }
+  if(s.pattern==="twinkle"){   // preview a real slow brightness fade, staggered per cell — not a color cycle
+    const cells=[...strip.children], n=cells.length||1, cycleSteps=22, floor=0.12;
+    let phase=0;
+    anim=setInterval(()=>{
+      phase=(phase+1)%cycleSteps;
+      cells.forEach((sp,i)=>{
+        const local=(phase+Math.round((i*cycleSteps)/n))%cycleSteps;
+        const t=local/cycleSteps;
+        const factor=floor+(1-floor)*(1-Math.cos(t*2*Math.PI))/2;
+        const base=s.cols[i%s.cols.length];
+        sp.style.background=`rgb(${Math.round(base[0]*factor)},${Math.round(base[1]*factor)},${Math.round(base[2]*factor)})`;
+      });
+    }, Math.max(120, s.step||220));
     return;
   }
   let off=0;
@@ -552,8 +573,8 @@ renderSaved();
 /* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
 const LIB_CATS = ["All","Movement","Party","Calm","Nature","Holidays"];
 const SEASON_EMOJI = {Winter:"❄️", Spring:"🌸", Summer:"☀️", Fall:"🍂"};
-const PATTERN_EMOJI = {chase:"💫", wave:"🌊", strobe:"⚡", bounce:"🎆"};
-const MOTION_TYPES = ["All","Solid","Cycle","Chase","Wave","Strobe","Bounce"];
+const PATTERN_EMOJI = {chase:"💫", wave:"🌊", strobe:"⚡", bounce:"🎆", twinkle:"✨"};
+const MOTION_TYPES = ["All","Solid","Cycle","Chase","Wave","Strobe","Bounce","Twinkle"];
 // motion classification: a segment pattern, a whole-device color cycle, or a fixed static look
 function motionType(p){
   if(p.pattern) return p.pattern[0].toUpperCase()+p.pattern.slice(1);   // chase/wave/strobe/bounce
@@ -602,6 +623,13 @@ const PRESETS = [
   {name:"Triple Comet",   cat:"Movement", pattern:"bounce", bandWidth:3, bandCount:3, step:240, motion:true, cols:[[255,0,140],[0,220,255],[255,220,0]]},
   {name:"Chaser Storm",   cat:"Movement", pattern:"bounce", bandWidth:2, bandCount:4, step:220, motion:true, cols:[[255,60,0],[0,200,255],[160,60,255],[80,255,120]]},
   {name:"Rainbow Bounce", cat:"Movement", pattern:"bounce", bandWidth:2, bandCount:5, step:230, motion:true, cols:[[255,0,0],[255,140,0],[255,230,0],[0,200,60],[0,140,255],[160,60,255]]},
+  // TWINKLE: a real slow brightness FADE (not a color cycle or hard flash) — zones
+  // breathe up/down on a staggered cosine ramp, like fairy lights. Also the one
+  // Movement pattern that gracefully works on non-addressable lights (whole-device
+  // brightness breathe instead of per-segment).
+  {name:"Twinkle Glow",   cat:"Movement", pattern:"twinkle", step:280, motion:true, cols:[[255,214,140],[255,180,90],[255,140,60]]},
+  {name:"Soft Breathe",   cat:"Movement", pattern:"twinkle", step:340, motion:true, cols:[[120,180,255],[80,140,255],[180,210,255]]},
+  {name:"Starlight Twinkle",cat:"Movement",pattern:"twinkle", step:260, motion:true, cols:[[255,255,255],[210,225,255],[160,200,255]]},
   {name:"Party Pulse",  cat:"Party", motion:true, step:1000, cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
   {name:"Disco",        cat:"Party", motion:true, step:700,  cols:[[255,0,0],[255,140,0],[255,255,0],[0,200,0],[0,120,255],[150,0,255]]},
   {name:"Neon City",    cat:"Party", motion:true, step:900,  cols:[[255,20,147],[0,255,255],[180,0,255],[255,0,90]]},

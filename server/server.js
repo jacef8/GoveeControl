@@ -77,17 +77,26 @@ const gate = (req, res, next) => {
 
 app.get("/health", (_req, res) =>
   res.json({ ok: true, govee: !!GOVEE_KEY, ai: !!ANTHROPIC_KEY, automations: store.length, dataDir: DATA_DIR,
-    tz: TZ, serverTime: new Date().toISOString(), serverLocalTime: new Date().toLocaleString("en-US", { timeZone: TZ }) }));
+    tz: TZ, serverTime: new Date().toISOString(), serverLocalTime: new Date().toLocaleString("en-US", { timeZone: TZ }),
+    goveeRateLimit: lastRateLimit }));
 
 /* ============================================================
    GOVEE CLOUD API
    ============================================================ */
+// Govee's Cloud API is free but quota-limited (a daily request cap); it reports
+// remaining quota via X-RateLimit-* response headers. Capture whatever it sends
+// so /health can show real quota state instead of guessing whether the animation
+// loops (which call this on every tick) have burned through the day's allowance.
+let lastRateLimit = null;
 async function govee(path, body) {
   const res = await fetch(GOVEE_BASE + path, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json", "Govee-API-Key": GOVEE_KEY },
     body: body ? JSON.stringify(body) : undefined,
   });
+  const rl = {};
+  res.headers.forEach((v, k) => { if (/rate.?limit/i.test(k)) rl[k] = v; });
+  if (Object.keys(rl).length) lastRateLimit = { ...rl, path, status: res.status, at: new Date().toISOString() };
   if (!res.ok) throw new Error(`govee ${res.status}: ${await res.text().catch(() => "")}`);
   return res.json();
 }

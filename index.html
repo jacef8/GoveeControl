@@ -778,6 +778,15 @@ function openLight(id){
   const d=byId(id);
   if(d && d._scenes===undefined){ d._scenes=null;   // fetch this strip's built-in scenes once
     Govee.listScenes(id).then(sc=>{ d._scenes=sc||[]; renderLightDetail(); }).catch(()=>{ d._scenes=[]; renderLightDetail(); }); }
+  refreshHealth();   // pick up current Govee API quota state for the Debug info panel
+}
+// cached /health snapshot (incl. Govee's API rate-limit headers, if any were seen
+// server-side) so the Debug info panel can show quota state without a manual curl.
+let LAST_HEALTH=null;
+async function refreshHealth(){
+  if(CONFIG.USE_MOCK) return;
+  try{ const r=await fetch(CONFIG.PROXY_BASE+"/health",{headers:{"X-Passcode":CONFIG.PASSCODE}});
+    LAST_HEALTH=await r.json(); renderLightDetail(); }catch{}
 }
 function closeLight(){ const ov=document.getElementById("liteOverlay"); if(ov) ov.style.display="none"; }
 // does this device expose addressable segments? (RGBIC strips) + how many
@@ -811,12 +820,16 @@ function setColorEverywhere(d, v){
 // of guessing (online status per Govee, actual capability list, segment count).
 function debugSection(d,seg){
   const caps = (d.capabilities||[]).map(c=>c.type.replace("devices.capabilities.","")).join(", ") || "(none reported)";
+  const rl = LAST_HEALTH?.goveeRateLimit;
+  const rlText = rl ? Object.entries(rl).filter(([k])=>k!=="path"&&k!=="status"&&k!=="at").map(([k,v])=>`${k}: ${v}`).join(", ") + ` (as of ${new Date(rl.at).toLocaleTimeString()})`
+    : "no rate-limit headers seen yet this session — trigger any scene/control, then reopen this panel";
   const rows = [
     ["Device ID", d.device],
     ["SKU / model", d.sku||"?"],
     ["Govee reports online", d.online ? "yes" : "no — commands are skipped for offline lights"],
     ["Capabilities", caps],
     ["Segment support", seg.supported ? `yes, ${seg.count} segments` : "no — movement scenes fall back to a color cycle on this light"],
+    ["Govee API quota", rlText],
   ];
   return `<details class="ld-debug"><summary>🔧 Debug info</summary>
     <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px">

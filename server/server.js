@@ -322,9 +322,18 @@ async function runTwinkle(id, count, cols, stepMs) {
   const zones = Math.min(4, Math.max(2, Math.round(count / 4)));   // fewer zones = fewer commands per tick
   const floor = 0.12;      // never fully dark — a glow, not an off
   const cycleSteps = 16;   // ticks for ONE full breath (dim->bright->dim)
-  let phase = 0, busy = false;
+  let phase = 0, z = 0, busy = false;
   const zoneSegs = Array.from({ length: zones }, () => []);
   for (let i = 0; i < count; i++) zoneSegs[Math.floor((i * zones) / count)].push(i);
+  // Sending every zone's update within one tick (even one-at-a-time, sequentially
+  // awaited) still landed multiple calls to the SAME device within well under a
+  // second — Govee's cloud appears to rate-limit/drop calls to one device that
+  // arrive that close together, which is consistent with "on/off and color work
+  // fine" (single, infrequent calls) but "twinkle doesn't move" (frequent bursts).
+  // Now each tick sends exactly ONE zone's update, round-robin, at a floor of
+  // 1.1s between ANY two calls to this device — slower, but every call actually
+  // lands. (Also fine for the "very slow fade" look that was asked for.)
+  const step = Math.max(1100, stepMs || 1100);
   // strict=true (only on the very first application) lets a genuine API error
   // propagate out to the caller instead of being silently swallowed — that's
   // what made past failures look like "nothing happened" with no diagnostic.
@@ -334,11 +343,8 @@ async function runTwinkle(id, count, cols, stepMs) {
     if (busy) return; busy = true;
     try {
       phase = (phase + 1) % cycleSteps;
-      // sequential, not Promise.all — firing several segmentedColorRgb calls to
-      // the SAME device at once risks the cloud coalescing/dropping all but one,
-      // which reads as the light freezing at a single brightness ("static").
-      for (let z = 0; z < zones; z++) {
-        const segs = zoneSegs[z]; if (!segs.length) continue;
+      const segs = zoneSegs[z]; z = (z + 1) % zones;
+      if (segs.length) {
         const local = (phase + Math.round((z * cycleSteps) / zones)) % cycleSteps;
         const t = local / cycleSteps;
         const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
@@ -350,7 +356,7 @@ async function runTwinkle(id, count, cols, stepMs) {
     } finally { busy = false; }
   };
   await tick(true);
-  segAnimTimers[id] = setInterval(() => tick(false).catch(() => {}), Math.max(400, stepMs || 500));
+  segAnimTimers[id] = setInterval(() => tick(false).catch(() => {}), step);
 }
 // Whole-device twinkle/breathe fallback for lights that AREN'T addressable
 // (no segments): fades the actual brightness capability slowly up and down
@@ -363,7 +369,10 @@ async function runBreatheWhole(id, rgb, stepMs) {
   await setPower(id, true);          // first calls throw on real failure — see runTwinkle's comment
   await setColor(id, rgbInt(rgb));
   const floorB = 10, cycleSteps = 18;   // ticks for ONE full breath (dim->bright->dim)
-  const step = Math.max(350, stepMs || 400);
+  // same reasoning as runTwinkle: one call per tick is still too fast at
+  // 350-400ms if Govee rate-limits by call frequency per device, not just
+  // burst size — floor raised to 1.1s so every tick actually lands.
+  const step = Math.max(1100, stepMs || 1100);
   let phase = 0, busy = false;
   const tick = async (strict) => {
     if (busy) return; busy = true;

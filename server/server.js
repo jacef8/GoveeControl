@@ -308,14 +308,20 @@ async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
 // (cosine ramp, floored so it glows rather than blinking off) so zones drift
 // in and out of sync, like fairy lights, instead of a uniform strobe/cycle.
 async function runTwinkle(id, count, cols, stepMs) {
-  stopSegAnim(id); await setPower(id, true).catch(() => {});
+  stopSegAnim(id);
+  await setPower(id, true);   // let a real failure (offline device, bad id, etc.) throw here — the FIRST call must surface errors, not swallow them
   const zones = Math.min(4, Math.max(2, Math.round(count / 4)));   // fewer zones = fewer commands per tick
   const floor = 0.12;      // never fully dark — a glow, not an off
   const cycleSteps = 16;   // ticks for ONE full breath (dim->bright->dim)
   let phase = 0, busy = false;
   const zoneSegs = Array.from({ length: zones }, () => []);
   for (let i = 0; i < count; i++) zoneSegs[Math.floor((i * zones) / count)].push(i);
-  const tick = async () => {
+  // strict=true (only on the very first application) lets a genuine API error
+  // propagate out to the caller instead of being silently swallowed — that's
+  // what made past failures look like "nothing happened" with no diagnostic.
+  // Ongoing ticks inside setInterval stay resilient (strict=false) so one
+  // transient hiccup doesn't kill the whole animation loop.
+  const tick = async (strict) => {
     if (busy) return; busy = true;
     try {
       phase = (phase + 1) % cycleSteps;
@@ -329,12 +335,13 @@ async function runTwinkle(id, count, cols, stepMs) {
         const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
         const base = cols[z % cols.length];
         const rgb = rgbInt(base.map((c) => Math.round(c * factor)));
-        await segControl(id, segs, rgb).catch(() => {});
+        const call = segControl(id, segs, rgb);
+        await (strict ? call : call.catch(() => {}));
       }
     } finally { busy = false; }
   };
-  await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(400, stepMs || 500));
+  await tick(true);
+  segAnimTimers[id] = setInterval(() => tick(false).catch(() => {}), Math.max(400, stepMs || 500));
 }
 // Whole-device twinkle/breathe fallback for lights that AREN'T addressable
 // (no segments): fades the actual brightness capability slowly up and down
@@ -343,22 +350,24 @@ async function runTwinkle(id, count, cols, stepMs) {
 let breatheTimers = {};   // deviceId -> interval handle, independent per device
 function stopBreathe(id) { if (breatheTimers[id]) { clearInterval(breatheTimers[id]); delete breatheTimers[id]; } }
 async function runBreatheWhole(id, rgb, stepMs) {
-  stopBreathe(id); await setPower(id, true).catch(() => {});
-  await setColor(id, rgbInt(rgb)).catch(() => {});
+  stopBreathe(id);
+  await setPower(id, true);          // first calls throw on real failure — see runTwinkle's comment
+  await setColor(id, rgbInt(rgb));
   const floorB = 10, cycleSteps = 18;   // ticks for ONE full breath (dim->bright->dim)
   const step = Math.max(350, stepMs || 400);
   let phase = 0, busy = false;
-  const tick = async () => {
+  const tick = async (strict) => {
     if (busy) return; busy = true;
     try {
       phase = (phase + 1) % cycleSteps;
       const t = phase / cycleSteps;
       const b = Math.round(floorB + (100 - floorB) * (1 - Math.cos(t * 2 * Math.PI)) / 2);
-      await setBright(id, b).catch(() => {});
+      const call = setBright(id, b);
+      await (strict ? call : call.catch(() => {}));
     } finally { busy = false; }
   };
-  await tick();
-  breatheTimers[id] = setInterval(() => tick().catch(() => {}), step);
+  await tick(true);
+  breatheTimers[id] = setInterval(() => tick(false).catch(() => {}), step);
 }
 // Shared by the live /govee/segscene route AND scheduled/triggered scenes
 // (runAction, IFTTT) so a segment pattern behaves identically either way.

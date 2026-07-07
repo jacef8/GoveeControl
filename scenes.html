@@ -347,8 +347,14 @@ async function designScene(prompt){
 }
 async function applyScene(s){
   if(!s.targets || !s.targets.length) s.targets = currentTargets();   // honor the "Apply to" selection if not already set
-  if(!CONFIG.USE_MOCK){ await fetch(CONFIG.PROXY_BASE+"/govee/scene",{method:"POST",
-    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify(s)}); }
+  if(!CONFIG.USE_MOCK){
+    const r = await fetch(CONFIG.PROXY_BASE+"/govee/scene",{method:"POST",
+      headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify(s)});
+    if(!r.ok){   // was previously ignored — a failed apply looked identical to a successful one
+      const j = await r.json().catch(()=>({}));
+      throw new Error(j.error || `scene request failed (${r.status})`);
+    }
+  }
   return true;
 }
 
@@ -437,9 +443,13 @@ async function executeApply(scene, kind, ids){
     return;
   }
   if(scene.pattern==="twinkle"){   // twinkle handles segment-capable (per-segment breathe) AND whole-device (single breathe) server-side — one call covers everyone
-    await startSegScene(ids, "twinkle", scene.cols, scene.step, scene.bandWidth, scene.bandCount);
-    markScene(ids, scene.name, "twinkle");
-    toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
+    try{
+      await startSegScene(ids, "twinkle", scene.cols, scene.step, scene.bandWidth, scene.bandCount);
+      markScene(ids, scene.name, "twinkle");
+      toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
+    }catch(e){
+      toast(`Failed to apply "${scene.name}": ${e.message}`, true); msg(`Failed to apply "${scene.name}": ${e.message}`);
+    }
     return;
   }
   if(scene.pattern){   // movement scene: segment-capable devices chase/wave, the rest fall back to a color cycle
@@ -455,16 +465,26 @@ async function executeApply(scene, kind, ids){
       const litCols = scene.cols.filter(([r,g,b])=>r+g+b>30);
       tasks.push(applyScene({...scene, motion:true, cols:litCols.length?litCols:scene.cols, targets:plainNames}));
     }
-    await Promise.allSettled(tasks);
+    const results = await Promise.allSettled(tasks);
     markScene(capable, scene.name, scene.pattern);
     markScene(plain, scene.name, "cycle");
     const note = capable.length && plain.length ? ` (${plain.length} without segments ran a color cycle instead)` : "";
-    toast(`Applied "${scene.name}" to ${label}${note}`); msg(`Applied "${scene.name}" to ${label}${note}`);
+    const failed = results.find(r=>r.status==="rejected");
+    if(failed){
+      toast(`Failed to apply "${scene.name}" to ${label}: ${failed.reason?.message||"error"}`, true);
+      msg(`Failed to apply "${scene.name}": ${failed.reason?.message||"error"}`);
+    } else {
+      toast(`Applied "${scene.name}" to ${label}${note}`); msg(`Applied "${scene.name}" to ${label}${note}`);
+    }
     return;
   }
-  await applyScene({...scene, targets:names});
-  markScene(ids, scene.name, scene.motion ? "cycle" : null);   // motion:false = a fixed color, not an ongoing scene
-  toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
+  try{
+    await applyScene({...scene, targets:names});
+    markScene(ids, scene.name, scene.motion ? "cycle" : null);   // motion:false = a fixed color, not an ongoing scene
+    toast(`Applied "${scene.name}" to ${label}`); msg(`Applied "${scene.name}" to ${label}`);
+  }catch(e){
+    toast(`Failed to apply "${scene.name}": ${e.message}`, true); msg(`Failed to apply "${scene.name}": ${e.message}`);
+  }
 }
 
 /* ---------- preview rendering ---------- */
@@ -751,8 +771,12 @@ async function activateBuiltin(s, ids){
 function deviceHasSegments(d){ return (d.capabilities||[]).some(c=>c.type==="devices.capabilities.segment_color_setting"); }
 async function startSegScene(ids, pattern, cols, step, bandWidth, bandCount){
   if(CONFIG.USE_MOCK) return true;
-  await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",headers:phdr(),
+  const r = await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",headers:phdr(),
     body:JSON.stringify({devices:ids, pattern, cols, step, bandWidth, bandCount})});
+  if(!r.ok){   // was previously ignored — a failed apply looked identical to a successful one
+    const j = await r.json().catch(()=>({}));
+    throw new Error(j.error || `segscene request failed (${r.status})`);
+  }
   return true;
 }
 // The Cloud API gives built-in scenes as name+id only (no colors), so we infer a

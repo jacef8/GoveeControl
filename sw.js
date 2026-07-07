@@ -1,6 +1,6 @@
 /* Govee Control — minimal offline shell.
    Bump CACHE on every deploy so installed PWAs don't serve a stale page. */
-const CACHE = "govee-v38";
+const CACHE = "govee-v39";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", e => {

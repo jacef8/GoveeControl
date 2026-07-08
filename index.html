@@ -55,13 +55,24 @@
   .act:active{transform:scale(.96)}
   .act.on{color:#7cf5b8; background:var(--sheen), color-mix(in srgb,var(--on) 22%,var(--glass-tint)); border-color:color-mix(in srgb,var(--on) 45%,var(--glass-border))}
   .act.off{color:#ff9aa4; background:var(--sheen), color-mix(in srgb,var(--off) 20%,var(--glass-tint)); border-color:color-mix(in srgb,var(--off) 45%,var(--glass-border))}
-  /* section nav: Lights / Scenes / Timers — glossy pill segmented control */
-  .nav{display:flex; gap:6px; padding:4px; border-radius:16px; border:1px solid var(--glass-border-soft);
-    background:var(--glass-tint-soft)}
-  .navlink{flex:1; text-align:center; padding:9px; border-radius:12px; cursor:pointer; text-decoration:none;
-    font:600 14px 'Inter',system-ui; color:var(--ink-2); transition:background .2s, color .2s}
-  .navlink.active{color:#fff; background:var(--sheen), linear-gradient(90deg,rgba(138,123,255,.65),rgba(80,140,255,.6));
-    box-shadow:0 5px 20px -5px rgba(120,110,255,.75), inset 0 1px 0 rgba(255,255,255,.25)}
+  /* home screen: one 2-column grid of large buttons for every major section
+     (Scenes/Timers/Triggers/Groups/On-Off/Settings/Refresh) — replaces the
+     old thin nav-pills + actions-row header strip (jford: "the app should
+     feature 2 columns with different options... lights, settings... in each
+     button"). The small header gear (injected by the Settings module) stays
+     in the DOM so its click logic is reused, just hidden — the grid's
+     Settings button forwards a click to it instead of duplicating the modal. */
+  .home-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .home-btn{appearance:none; border:1px solid var(--glass-border); color:var(--ink);
+    background:var(--sheen), var(--glass-tint); backdrop-filter:blur(var(--blur)); -webkit-backdrop-filter:blur(var(--blur));
+    font:650 14.5px 'Inter',system-ui; padding:17px 10px; border-radius:16px; cursor:pointer; text-decoration:none;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; transition:transform .15s;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+  .home-btn .hi{font-size:23px; line-height:1}
+  .home-btn:active{transform:scale(.96)}
+  .home-btn.on{color:#7cf5b8; background:var(--sheen), color-mix(in srgb,var(--on) 22%,var(--glass-tint)); border-color:color-mix(in srgb,var(--on) 45%,var(--glass-border))}
+  .home-btn.off{color:#ff9aa4; background:var(--sheen), color-mix(in srgb,var(--off) 20%,var(--glass-tint)); border-color:color-mix(in srgb,var(--off) 45%,var(--glass-border))}
+  .appbar [data-cfg]{display:none}
   /* ---------- scroll body ---------- */
   main{flex:1 1 auto; overflow:auto; padding:18px 16px 34px; -webkit-overflow-scrolling:touch}
   .grpttl{font-size:17px; font-weight:700; color:var(--ink); margin:24px 4px 13px; letter-spacing:-.3px;
@@ -300,17 +311,16 @@
   <header>
     <div class="appbar">
       <div class="brand"><span class="logo"></span> Govee</div>
-      <button class="icon" data-act="refresh" title="Refresh">⟳</button>
     </div>
-    <nav class="nav">
-      <span class="navlink active">Lights</span>
-      <a class="navlink" href="scenes.html">Scenes</a>
-      <a class="navlink" href="scenes.html#timers">Timers</a>
-    </nav>
-    <div class="actions">
-      <button class="act on" data-act="allon">All On</button>
-      <button class="act off" data-act="alloff">All Off</button>
-      <button class="act" data-act="groups">Groups</button>
+    <div class="home-grid">
+      <a class="home-btn" href="scenes.html"><span class="hi">🎬</span>Scenes</a>
+      <a class="home-btn" href="scenes.html#timers"><span class="hi">⏱</span>Timers</a>
+      <a class="home-btn" href="scenes.html#triggers"><span class="hi">⚡</span>Triggers</a>
+      <button class="home-btn" data-act="groups"><span class="hi">👥</span>Groups</button>
+      <button class="home-btn on" data-act="allon"><span class="hi">💡</span>All On</button>
+      <button class="home-btn off" data-act="alloff"><span class="hi">🌙</span>All Off</button>
+      <button class="home-btn" data-act="settings"><span class="hi">⚙</span>Settings</button>
+      <button class="home-btn" data-act="refresh"><span class="hi">⟳</span>Refresh</button>
     </div>
   </header>
 
@@ -644,6 +654,7 @@ document.querySelector("header").addEventListener("click", e=>{
   const a=b.dataset.act;
   if(a==="refresh") return load();
   if(a==="groups") return openGroups();
+  if(a==="settings") return document.querySelector("[data-cfg]")?.click();
   if(a==="allon"||a==="alloff"){ const want=a==="allon";
     DEVICES.filter(d=>d.online).forEach(d=>{ d._state.on=want; Govee.setPower(d.device,want).catch(()=>{}); });
     render(); toast(`All lights ${want?'on':'off'}`);

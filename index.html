@@ -518,10 +518,12 @@ function render(){
     const presets = PRESETS.map(([hex,r,g,b])=>
       `<span class="swatch" style="background:${hex}" data-grpcolor="${Govee.rgbToInt(r,g,b)}" data-grp="${name}"></span>`).join("");
     const gid = (GROUPS.find(g=>g.name===name)||{}).id;
+    const sceneLink = gid ? `<a class="ticon" href="scenes.html#scenetgt=grp:${gid}" title="Scenes for ${name} — applies straight to this group, no picker">🎬</a>` : "";
     const timerLink = gid ? `<a class="ticon" href="scenes.html#tgt=grp:${gid}" title="Set a timer for ${name}">⏱</a>` : "";
     tiles += `<div class="tile ${wide?'wide':''}">
         <div class="thead">
           <span class="tname">${name} <span class="tcount">${onCount}/${list.length} on</span></span>
+          ${sceneLink}
           ${timerLink}
           <div class="gsw ${anyOn?'on':''}" data-grptoggle="${name}" role="switch" aria-checked="${anyOn}"><span class="gk"></span></div>
         </div>

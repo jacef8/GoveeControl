@@ -308,6 +308,13 @@ function currentTargets(){
   if(sceneTarget.startsWith("dev:")){ const d=DEVICES.find(x=>x.device===sceneTarget.slice(4)); return d?[d.deviceName]:deviceNames(); }
   return deviceNames();
 }
+function currentTargetIds(){
+  if(sceneTarget==="all") return DEVICES.map(d=>d.device);
+  if(sceneTarget.startsWith("grp:")){ const g=(SGROUPS||[]).find(x=>x.id===sceneTarget.slice(4));
+    return g && (g.devices||[]).length ? g.devices.slice() : DEVICES.map(d=>d.device); }
+  if(sceneTarget.startsWith("dev:")){ const id=sceneTarget.slice(4); return DEVICES.some(d=>d.device===id) ? [id] : DEVICES.map(d=>d.device); }
+  return DEVICES.map(d=>d.device);
+}
 function targetLabel(){
   if(sceneTarget==="all") return "all lights";
   if(sceneTarget.startsWith("grp:")){ const g=(SGROUPS||[]).find(x=>x.id===sceneTarget.slice(4)); return g?g.name:"group"; }
@@ -364,6 +371,17 @@ async function applyScene(s){
    A popup lets you check any combination of groups/individual
    lights (multi-select), then Apply sends it to exactly those.
    ============================================================ */
+// Skip the multi-select picker when the sticky "Apply to" bar already names a
+// SPECIFIC light or group — that's already an unambiguous answer to "where
+// does this go", asking again on every tap was pure friction (jford: "select
+// a light, go to scenes for that strand, select a scene — it should not ask
+// me which light to apply it to"). Still opens the picker when Apply-to is
+// "All lights" (the ambiguous default) so ad hoc multi-selection is still
+// reachable — switch Apply-to back to "All lights" to get it again.
+function applyOrPick(scene, kind){
+  if(sceneTarget!=="all"){ executeApply(scene, kind, currentTargetIds()); return; }
+  openApplyPicker(scene, kind);
+}
 function openApplyPicker(scene, kind){
   let ov = document.getElementById("applyOverlay");
   if(!ov){
@@ -1116,7 +1134,7 @@ $("#ggen").onclick=async(ev)=>{ const p=$("#gp").value||"multicolored moving par
   flashEl(ev&&ev.currentTarget); toast("Generating scene…"); msg("Generating scene…");
   const s=await designScene(p); s.origin="ai"; renderPreview(s);
   msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`);
-  openApplyPicker(s,"library"); };
+  applyOrPick(s,"library"); };
 $("#gp").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#ggen").click(); } });
 $("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
 $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;
@@ -1139,10 +1157,10 @@ $("#gteam").onchange=()=>{ team=$("#gteam").value; localStorage.setItem("gv_team
 document.addEventListener("click", async e=>{
   const ex=e.target.closest("[data-ex]"); if(ex){ $("#gp").value=ex.dataset.ex; $("#ggen").click(); return; }
   const sdel=e.target.closest("[data-savedel]"); if(sdel){ e.stopPropagation(); const nm=SAVED[+sdel.dataset.savedel]?.name; delSaved(+sdel.dataset.savedel); toast(`Removed "${nm||'scene'}"`); return; }
-  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); flashEl(sv); renderPreview(s); openApplyPicker(s,"saved"); return; }
+  const sv=e.target.closest("[data-act]"); if(sv){ const s=SAVED[+sv.dataset.act]; setActive(sv); flashEl(sv); renderPreview(s); applyOrPick(s,"saved"); return; }
   const lc=e.target.closest("[data-libcat]"); if(lc){ libCat=lc.dataset.libcat; libHoliday="All"; renderLibFilter(); renderLib2(); renderLibrary(); return; }
-  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); flashEl(lb); renderPreview(s); openApplyPicker(s,"library"); return; }
-  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); flashEl(bi); openApplyPicker(s,"device"); return; }
+  const lb=e.target.closest("[data-lib]"); if(lb){ const p=PRESETS[+lb.dataset.lib]; const s=presetToScene(p); setActive(lb); flashEl(lb); renderPreview(s); applyOrPick(s,"library"); return; }
+  const bi=e.target.closest("[data-bi]"); if(bi){ const s=BUILTIN[+bi.dataset.bi]; setActive(bi); flashEl(bi); applyOrPick(s,"device"); return; }
   const trt=e.target.closest("[data-trtog]"); if(trt){ const id=trt.dataset.trtog; const t=TRIGGERS.find(x=>x.id===id); await trigPatch(id,{enabled:!t.enabled}); renderTriggers(); msg(`${t.event} ${t.enabled?'enabled':'paused'}`); return; }
   const trd=e.target.closest("[data-trdel]"); if(trd){ const id=trd.dataset.trdel; const ev=(TRIGGERS.find(x=>x.id===id)||{}).event; await trigDel(id); renderTriggers(); msg(`Removed trigger "${ev}"`); return; }
   const tg=e.target.closest("[data-tog]"); if(tg){ const id=tg.dataset.tog; const a=AUTO.find(x=>x.id===id); if(!a)return;
@@ -1153,13 +1171,25 @@ document.addEventListener("click", async e=>{
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
 function applyTimerHash(){
-  const m=(location.hash||"").match(/tgt=grp:([^&]+)/); if(!m) return;
+  const m=(location.hash||"").match(/(?:^|[#&])tgt=grp:([^&]+)/); if(!m) return;
   if(typeof showTab==="function") showTab("timers");
   const gid=m[1];
   const gs=$("#gschgrp"); if(gs) gs.value=gid;                 // automation → this group
   const ts=$("#gtarget"); if(ts){ sceneTarget="grp:"+gid; if([...ts.options].some(o=>o.value===sceneTarget)) ts.value=sceneTarget; }
   const inp=$("#gschin"); if(inp){ inp.scrollIntoView({block:"center"}); setTimeout(()=>inp.focus(),50);
     msg("Set a time for this group below — e.g. \"off at 11pm\""); }
+}
+// Deep link from a light's detail panel (index.html 🎬 icon) or a group tile:
+// #scenetgt=dev:<id> / #scenetgt=grp:<id> lands on Scenes with that light/group
+// already selected in the sticky "Apply to" bar — combined with applyOrPick()
+// above, tapping any scene from here applies straight to it, no picker.
+function applySceneTargetHash(){
+  const m=(location.hash||"").match(/scenetgt=(dev|grp):([^&]+)/); if(!m) return;
+  if(typeof showTab==="function") showTab("scenes");
+  sceneTarget=m[1]+":"+decodeURIComponent(m[2]);
+  renderTargets();
+  const opt=$("#gtarget")?.selectedOptions[0];
+  msg("Scenes apply straight to "+(opt?opt.textContent:"this light")+" — no picker needed");
 }
 /* ---------- top-level tabs (Scenes / Timers / Triggers) ---------- */
 function showTab(name){
@@ -1169,8 +1199,8 @@ function showTab(name){
   const mn=document.querySelector("main"); if(mn) mn.scrollTop=0;
 }
 document.querySelectorAll(".stab[data-tab]").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-showTab( location.hash.includes("tgt=") ? "timers" : ((location.hash.match(/#(scenes|timers|triggers)/)||[])[1] || "scenes") );
-renderLibFilter(); renderLib2(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
+showTab( /(?:^|[#&])tgt=grp:/.test(location.hash) ? "timers" : ((location.hash.match(/#(scenes|timers|triggers)/)||[])[1] || "scenes") );
+renderLibFilter(); renderLib2(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); applySceneTargetHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
 $("#libenergy").onchange=()=>{ libEnergy=$("#libenergy").value; renderLibrary(); };
 $("#libmotion").onchange=()=>{ libMotion=$("#libmotion").value; renderLibrary(); };
 $("#libcolor").onchange=()=>{ libColor=$("#libcolor").value; renderLibrary(); };

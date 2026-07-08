@@ -851,6 +851,7 @@ function renderLightDetail(){
       <span class="litedot" style="--litec:${cssRgb(d._state.color)};width:15px;height:15px"></span>
       <div style="flex:1;min-width:0"><div class="ld-name">${d.deviceName}</div>
         <div class="ld-sub">${d.online?d.sku:'Offline · '+d.sku}</div></div>
+      <a class="ticon" href="scenes.html#scenetgt=dev:${d.device}" title="Scenes for ${d.deviceName} — applies straight to this light, no picker">🎬</a>
       <div class="sw ${on?'lon':''}" data-pwr="${d.device}"><span class="knob"></span></div>
       <button class="ld-x" data-ldclose aria-label="Close">✕</button></div>`;
   // one scrollable panel: everything about this strand, each control type its own defined glass card

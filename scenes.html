@@ -591,7 +591,7 @@ function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typ
 renderSaved();
 
 /* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
-const LIB_CATS = ["All","Movement","Party","Calm","Nature","Holidays"];
+const LIB_CATS = ["All","Signature","Movement","Party","Calm","Nature","Holidays"];
 const SEASON_EMOJI = {Winter:"❄️", Spring:"🌸", Summer:"☀️", Fall:"🍂"};
 const PATTERN_EMOJI = {chase:"💫", wave:"🌊", strobe:"⚡", bounce:"🎆", twinkle:"✨"};
 const MOTION_TYPES = ["All","Solid","Cycle","Chase","Wave","Strobe","Bounce","Twinkle"];
@@ -650,11 +650,27 @@ const PRESETS = [
   {name:"Twinkle Glow",   cat:"Movement", pattern:"twinkle", step:420, motion:true, cols:[[255,214,140],[255,180,90],[255,140,60]]},
   {name:"Soft Breathe",   cat:"Movement", pattern:"twinkle", step:460, motion:true, cols:[[120,180,255],[80,140,255],[180,210,255]]},
   {name:"Starlight Twinkle",cat:"Movement",pattern:"twinkle", step:400, motion:true, cols:[[255,255,255],[210,225,255],[160,200,255]]},
-  {name:"Party Pulse",  cat:"Party", motion:true, step:1000, cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
-  {name:"Disco",        cat:"Party", motion:true, step:700,  cols:[[255,0,0],[255,140,0],[255,255,0],[0,200,0],[0,120,255],[150,0,255]]},
-  {name:"Neon City",    cat:"Party", motion:true, step:900,  cols:[[255,20,147],[0,255,255],[180,0,255],[255,0,90]]},
-  {name:"Rave",         cat:"Party", motion:true, step:600,  cols:[[0,255,255],[255,0,255],[80,255,0],[255,255,255]]},
-  {name:"Color Wave",   cat:"Party", motion:true, step:850,  cols:[[255,80,80],[255,200,80],[120,255,120],[80,200,255],[180,120,255]]},
+  // PARTY REWIRE 2026-07-07: these predated the segment movement engine and had
+  // no `pattern` — they silently fell back to a slow whole-device color swap
+  // (no motion at all), which is why "Party" read as boring. Now real chase/
+  // wave/strobe/bounce with bigger, louder multi-color palettes.
+  {name:"Party Pulse",  cat:"Party", pattern:"bounce", bandWidth:2, bandCount:5, step:230, motion:true, cols:[[255,0,140],[0,200,255],[120,255,80],[255,180,0],[140,80,255]]},
+  {name:"Disco",        cat:"Party", pattern:"bounce", bandWidth:2, bandCount:4, step:220, motion:true, cols:[[255,0,90],[0,220,255],[255,210,0],[120,255,60],[170,60,255]]},
+  {name:"Neon City",    cat:"Party", pattern:"chase",  bandWidth:4, step:190, motion:true, cols:[[255,20,147],[0,255,255],[180,0,255],[255,0,90]]},
+  {name:"Rave",         cat:"Party", pattern:"strobe", step:110, motion:true, cols:[[0,255,255],[255,0,255],[140,255,0],[255,255,255]]},
+  {name:"Color Wave",   cat:"Party", pattern:"wave",   step:300, motion:true, cols:[[255,80,80],[255,200,80],[120,255,120],[80,200,255],[180,120,255],[255,80,220]]},
+  // SIGNATURE 2026-07-07 (jford: "not up to what these lights are capable of —
+  // lots of different colors dancing around, chasing back and forth, bright
+  // vibrant active"): flagship high-energy scenes, inspired by real outdoor-
+  // light show concepts (Meteor Shower, Comet, Aurora, Rainbow Chase,
+  // Fireworks) — built on our own chase/wave/strobe/bounce engine since Govee
+  // doesn't publish its scene recipes, just names.
+  {name:"Rainbow Chase",  cat:"Signature", pattern:"chase",  bandWidth:5, step:190, motion:true, cols:[[255,0,0],[255,140,0],[255,230,0],[0,200,60],[0,140,255],[90,60,220],[190,0,220]]},
+  {name:"Comet Storm",    cat:"Signature", pattern:"bounce", bandWidth:2, bandCount:5, step:230, motion:true, cols:[[255,0,90],[0,220,255],[255,210,0],[120,255,60],[170,60,255],[255,90,0]]},
+  {name:"Meteor Shower",  cat:"Signature", pattern:"chase",  bandWidth:2, step:180, motion:true, cols:[[255,255,255],[210,230,255],[170,210,255]]},
+  {name:"Aurora Flow",    cat:"Signature", pattern:"wave",   step:340, motion:true, cols:[[20,220,170],[60,120,255],[170,60,255],[255,60,170],[20,200,140]]},
+  {name:"Fireworks Burst",cat:"Signature", pattern:"strobe", step:120, motion:true, cols:[[255,60,40],[255,210,60],[80,255,120],[80,160,255],[0,0,0]]},
+  {name:"Candy Bounce",   cat:"Signature", pattern:"bounce", bandWidth:3, bandCount:4, step:230, motion:true, cols:[[255,60,170],[60,220,255],[255,220,60],[190,90,255]]},
   {name:"Ocean Calm",   cat:"Calm",  motion:true, step:2600, cols:[[0,90,200],[0,160,180],[40,120,255],[0,210,160]]},
   {name:"Sunset Fade",  cat:"Calm",  motion:true, step:3000, cols:[[255,120,40],[255,80,120],[180,60,160],[90,50,150]]},
   {name:"Candlelight",  cat:"Calm",  motion:true, step:1400, cols:[[255,140,40],[255,110,30],[255,160,70],[230,90,20]]},

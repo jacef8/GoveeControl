@@ -196,6 +196,7 @@
       <div class="sttl" style="margin-top:0">Scene library</div>
       <div id="glibfilter" class="row" style="margin-bottom:9px"></div>
       <div class="row" style="margin-bottom:11px;gap:8px">
+        <select id="libenergy" title="Filter by energy" style="flex:1;min-width:110px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px"></select>
         <select id="libmotion" title="Filter by movement" style="flex:1;min-width:110px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px"></select>
         <select id="libcolor" title="Filter by color" style="flex:1;min-width:110px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px"></select>
         <select id="libholiday" title="Jump to a holiday" style="flex:1;min-width:130px;background:var(--surface-2);border:var(--bw) solid var(--line-strong);border-radius:6px;color:var(--ink);font:13px system-ui;padding:8px 9px;display:none"></select>
@@ -600,6 +601,30 @@ function motionType(p){
   if(p.pattern) return p.pattern[0].toUpperCase()+p.pattern.slice(1);   // chase/wave/strobe/bounce
   return p.motion ? "Cycle" : "Solid";
 }
+// energy classification: how active/vibrant a scene reads, independent of its
+// pattern TYPE (a scene can be a Chase and still be Tame or Vibrant depending
+// on speed/bandwidth/color count) — lets every category (Holidays included)
+// be filtered from calm to full-on, instead of only offering one "vibe" per
+// pattern name.
+const ENERGY_LEVELS = ["All","Tame","Moderate","Vibrant"];
+function energyLevel(p){
+  if(!p.motion || !p.pattern || p.pattern==="twinkle") return "Tame";
+  const step = p.step || 1000;
+  const litCols = (p.cols||[]).filter(([r,g,b])=>r+g+b>20);
+  const colors = litCols.length;
+  const bands = p.bandCount || 1;
+  let score = 0;
+  if(p.pattern==="strobe") score += 3;
+  else if(p.pattern==="bounce") score += 2 + Math.max(0, bands-2);
+  else if(p.pattern==="chase") score += 1 + (p.bandWidth>=4 ? 1 : 0);
+  else if(p.pattern==="wave") score += 1;
+  if(step<=180) score += 2; else if(step<=280) score += 1;
+  if(colors>=6) score += 2; else if(colors>=4) score += 1;
+  if(score<=0) return "Tame";
+  if(score<=3) return "Moderate";
+  return "Vibrant";
+}
+const ENERGY_EMOJI = {Tame:"🌙", Moderate:"🌗", Vibrant:"🔥"};
 const COLOR_FAMILIES = ["All","Red","Orange","Yellow","Green","Blue","Purple/Pink","White","Multicolor"];
 function rgbToHsl(r,g,b){ r/=255; g/=255; b/=255; const mx=Math.max(r,g,b), mn=Math.min(r,g,b); const l=(mx+mn)/2; let h=0,s=0;
   const d=mx-mn;
@@ -681,50 +706,75 @@ const PRESETS = [
   {name:"Forest",       cat:"Nature",motion:true, step:2200, cols:[[20,120,40],[60,170,40],[120,200,60],[30,140,90]]},
   {name:"Thunderstorm", cat:"Nature",motion:true, step:600,  cols:[[40,50,80],[200,210,255],[60,70,110],[255,255,255]]},
   {name:"Firelight",    cat:"Nature",motion:true, step:700,  cols:[[255,70,0],[255,140,20],[255,40,0],[255,170,60]]},
-  // Holiday movement shows — several per holiday (chase + wave), grouped by
-  // season in the library view. Same graceful fallback as other Movement
-  // scenes: non-segment lights get a plain color cycle instead.
+  // Holiday movement shows — several per holiday (chase + wave + strobe/bounce
+  // + a NEW twinkle "tame" option, see below), grouped by season in the
+  // library view. Same graceful fallback as other Movement scenes: non-segment
+  // lights get a plain color cycle instead.
+  //
+  // TAME-TO-VIBRANT SPREAD 2026-07-07 (jford: "I have a very tame Christmas
+  // and also a very bright and active Christmas — same for Halloween, Spring,
+  // Fourth of July" — every holiday needs BOTH ends, filterable via the new
+  // Energy dropdown, not just varying degrees of "moving"): every holiday
+  // below previously had ONLY chase/wave/strobe-or-bounce — all genuinely
+  // active, nothing calm. Added one Twinkle scene per holiday (a real slow
+  // glow, always "Tame" — reuses the pacing-fixed twinkle engine) and bumped
+  // Thanksgiving/Hanukkah/Kwanzaa's bounce to bandCount 5 to match Comet
+  // Storm/Party's top "Vibrant" tier. Memorial Day's Patriot Bounce is
+  // DELIBERATELY left more restrained (bandCount 3, not 5) — a dignified
+  // occasion, not a party, per the earlier holiday-scenes design choice.
   {name:"Countdown Chase",       cat:"Holidays", holiday:"New Year's",       season:"Winter", pattern:"chase", bandWidth:3, step:120, motion:true, cols:[[255,215,0],[255,255,255],[192,192,192]]},
   {name:"Champagne Sparkle Wave",cat:"Holidays", holiday:"New Year's",       season:"Winter", pattern:"wave",  step:300, motion:true, cols:[[255,215,0],[255,255,255],[200,200,220]]},
   {name:"Countdown Strobe",      cat:"Holidays", holiday:"New Year's",       season:"Winter", pattern:"strobe",step:120, motion:true, cols:[[255,215,0],[255,255,255],[192,192,192]]},
+  {name:"Champagne Twinkle",     cat:"Holidays", holiday:"New Year's",       season:"Winter", pattern:"twinkle",step:430, motion:true, cols:[[255,215,0],[255,255,255],[192,192,192]]},
   {name:"Sweetheart Chase",      cat:"Holidays", holiday:"Valentine's Day",  season:"Winter", pattern:"chase", bandWidth:4, step:150, motion:true, cols:[[255,40,90],[255,255,255]]},
   {name:"Rose Petal Wave",       cat:"Holidays", holiday:"Valentine's Day",  season:"Winter", pattern:"wave",  step:350, motion:true, cols:[[255,20,60],[255,120,160],[255,255,255]]},
   {name:"Heartbeat Strobe",      cat:"Holidays", holiday:"Valentine's Day",  season:"Winter", pattern:"strobe",step:170, motion:true, cols:[[255,20,70],[255,255,255]]},
+  {name:"Sweetheart Glow",       cat:"Holidays", holiday:"Valentine's Day",  season:"Winter", pattern:"twinkle",step:440, motion:true, cols:[[255,40,90],[255,120,160],[255,255,255]]},
   {name:"Shamrock Runner",       cat:"Holidays", holiday:"St. Patrick's Day",season:"Spring", pattern:"chase", bandWidth:4, step:140, motion:true, cols:[[0,160,60],[255,215,0]]},
   {name:"Emerald Wave",          cat:"Holidays", holiday:"St. Patrick's Day",season:"Spring", pattern:"wave",  step:320, motion:true, cols:[[0,110,40],[0,200,90],[255,215,0]]},
   {name:"Shamrock Bounce",       cat:"Holidays", holiday:"St. Patrick's Day",season:"Spring", pattern:"bounce",bandWidth:2, bandCount:4, step:230, motion:true, cols:[[0,160,60],[255,215,0]]},
+  {name:"Emerald Glow",          cat:"Holidays", holiday:"St. Patrick's Day",season:"Spring", pattern:"twinkle",step:440, motion:true, cols:[[0,160,60],[0,110,40],[255,215,0]]},
   {name:"Easter Basket Chase",   cat:"Holidays", holiday:"Easter",          season:"Spring", pattern:"chase", bandWidth:5, step:170, motion:true, cols:[[255,182,213],[186,156,255],[160,255,210],[255,246,153]]},
   {name:"Pastel Meadow Wave",    cat:"Holidays", holiday:"Easter",          season:"Spring", pattern:"wave",  step:400, motion:true, cols:[[255,182,213],[186,156,255],[160,255,210],[255,246,153]]},
   {name:"Egg Hunt Bounce",       cat:"Holidays", holiday:"Easter",          season:"Spring", pattern:"bounce",bandWidth:2, bandCount:4, step:240, motion:true, cols:[[255,182,213],[186,156,255],[160,255,210],[255,246,153]]},
+  {name:"Pastel Glow",           cat:"Holidays", holiday:"Easter",          season:"Spring", pattern:"twinkle",step:440, motion:true, cols:[[255,182,213],[186,156,255],[160,255,210],[255,246,153]]},
   {name:"Old Glory Chase",       cat:"Holidays", holiday:"Memorial Day",    season:"Summer", pattern:"chase", bandWidth:4, step:170, motion:true, cols:[[191,10,48],[255,255,255],[10,49,97]]},
   {name:"Remembrance Wave",      cat:"Holidays", holiday:"Memorial Day",    season:"Summer", pattern:"wave",  step:380, motion:true, cols:[[191,10,48],[255,255,255],[10,49,97]]},
   {name:"Patriot Bounce",        cat:"Holidays", holiday:"Memorial Day",    season:"Summer", pattern:"bounce",bandWidth:2, bandCount:3, step:250, motion:true, cols:[[191,10,48],[255,255,255],[10,49,97]]},
+  {name:"Solemn Glow",           cat:"Holidays", holiday:"Memorial Day",    season:"Summer", pattern:"twinkle",step:460, motion:true, cols:[[191,10,48],[255,255,255],[10,49,97]]},
   {name:"Fireworks Chase",       cat:"Holidays", holiday:"Independence Day",season:"Summer", pattern:"chase", bandWidth:3, step:110, motion:true, cols:[[220,20,40],[255,255,255],[20,60,180]]},
   {name:"Firework Burst Wave",   cat:"Holidays", holiday:"Independence Day",season:"Summer", pattern:"wave",  step:260, motion:true, cols:[[220,20,40],[255,255,255],[20,60,180],[255,200,0]]},
   {name:"Fireworks Strobe",      cat:"Holidays", holiday:"Independence Day",season:"Summer", pattern:"strobe",step:110, motion:true, cols:[[220,20,40],[255,255,255],[20,60,180],[255,200,0]]},
+  {name:"Starlight Sparkler",    cat:"Holidays", holiday:"Independence Day",season:"Summer", pattern:"twinkle",step:420, motion:true, cols:[[220,20,40],[255,255,255],[20,60,180]]},
   {name:"Spooky Chase",          cat:"Holidays", holiday:"Halloween",       season:"Fall",   pattern:"chase", bandWidth:4, step:130, motion:true, cols:[[255,110,0],[120,0,180]]},
   {name:"Witch's Brew Wave",     cat:"Holidays", holiday:"Halloween",       season:"Fall",   pattern:"wave",  step:320, motion:true, cols:[[255,110,0],[120,0,180],[60,200,60]]},
   {name:"Strobe Scare",          cat:"Holidays", holiday:"Halloween",       season:"Fall",   pattern:"strobe",step:130, motion:true, cols:[[255,110,0],[120,0,180],[60,200,60]]},
+  {name:"Eerie Glow",            cat:"Holidays", holiday:"Halloween",       season:"Fall",   pattern:"twinkle",step:440, motion:true, cols:[[255,110,0],[120,0,180],[60,200,60]]},
   {name:"Harvest Chase",         cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"chase", bandWidth:5, step:190, motion:true, cols:[[200,90,20],[120,20,20],[255,180,40]]},
   {name:"Autumn Leaves Wave",    cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"wave",  step:420, motion:true, cols:[[200,90,20],[120,20,20],[255,180,40],[90,60,20]]},
-  {name:"Harvest Bounce",        cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"bounce",bandWidth:2, bandCount:3, step:260, motion:true, cols:[[200,90,20],[120,20,20],[255,180,40]]},
+  {name:"Harvest Bounce",        cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"bounce",bandWidth:2, bandCount:5, step:230, motion:true, cols:[[200,90,20],[120,20,20],[255,180,40]]},
+  {name:"Harvest Glow",          cat:"Holidays", holiday:"Thanksgiving",    season:"Fall",   pattern:"twinkle",step:440, motion:true, cols:[[200,90,20],[255,180,40],[120,20,20]]},
   {name:"North Pole Chase",      cat:"Holidays", holiday:"Christmas",       season:"Winter", pattern:"chase", bandWidth:4, step:140, motion:true, cols:[[220,20,30],[20,140,40],[255,255,255]]},
   {name:"Christmas Twinkle Wave",cat:"Holidays", holiday:"Christmas",       season:"Winter", pattern:"wave",  step:320, motion:true, cols:[[220,20,30],[20,140,40],[255,215,0],[255,255,255]]},
   {name:"Twinkle Strobe",        cat:"Holidays", holiday:"Christmas",       season:"Winter", pattern:"strobe",step:130, motion:true, cols:[[220,20,30],[20,140,40],[255,215,0],[255,255,255]]},
+  {name:"Silent Night Glow",     cat:"Holidays", holiday:"Christmas",       season:"Winter", pattern:"twinkle",step:440, motion:true, cols:[[220,20,30],[20,140,40],[255,215,0],[255,255,255]]},
   {name:"Menorah Chase",         cat:"Holidays", holiday:"Hanukkah",        season:"Winter", pattern:"chase", bandWidth:3, step:150, motion:true, cols:[[30,80,200],[255,255,255]]},
   {name:"Festival of Lights Wave",cat:"Holidays",holiday:"Hanukkah",        season:"Winter", pattern:"wave",  step:350, motion:true, cols:[[20,60,160],[80,140,255],[255,255,255]]},
-  {name:"Festival Bounce",       cat:"Holidays", holiday:"Hanukkah",        season:"Winter", pattern:"bounce",bandWidth:2, bandCount:3, step:240, motion:true, cols:[[20,60,160],[80,140,255],[255,255,255]]},
+  {name:"Festival Bounce",       cat:"Holidays", holiday:"Hanukkah",        season:"Winter", pattern:"bounce",bandWidth:2, bandCount:5, step:230, motion:true, cols:[[20,60,160],[80,140,255],[255,255,255]]},
+  {name:"Candlelight Glow",      cat:"Holidays", holiday:"Hanukkah",        season:"Winter", pattern:"twinkle",step:440, motion:true, cols:[[20,60,160],[80,140,255],[255,255,255]]},
   {name:"Kwanzaa Chase",         cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"chase", bandWidth:4, step:160, motion:true, cols:[[200,20,20],[0,140,40]]},
   {name:"Unity Wave",            cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"wave",  step:380, motion:true, cols:[[200,20,20],[0,0,0],[0,140,40]]},
-  {name:"Unity Bounce",          cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"bounce",bandWidth:2, bandCount:3, step:250, motion:true, cols:[[200,20,20],[0,140,40]]},
+  {name:"Unity Bounce",          cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"bounce",bandWidth:2, bandCount:5, step:230, motion:true, cols:[[200,20,20],[0,140,40],[255,215,0]]},
+  {name:"Unity Glow",            cat:"Holidays", holiday:"Kwanzaa",         season:"Winter", pattern:"twinkle",step:440, motion:true, cols:[[200,20,20],[0,140,40]]},
 ];
-let libCat = "All", libMotion = "All", libColor = "All", libHoliday = "All";
+let libCat = "All", libEnergy = "All", libMotion = "All", libColor = "All", libHoliday = "All";
 function renderLibFilter(){
   $("#glibfilter").innerHTML = LIB_CATS.map(c=>
     `<button class="ex" data-libcat="${c}" style="${c===libCat?'border-color:var(--accent);color:#9bb4ff;background:#13203f':''}">${c}</button>`).join("");
 }
 function renderLib2(){
-  const ms=$("#libmotion"), cs=$("#libcolor"), hs=$("#libholiday");
+  const es=$("#libenergy"), ms=$("#libmotion"), cs=$("#libcolor"), hs=$("#libholiday");
+  if(es) es.innerHTML = ENERGY_LEVELS.map(e=>`<option value="${e}" ${e===libEnergy?'selected':''}>${e==="All"?"Any energy":(ENERGY_EMOJI[e]||"")+" "+e}</option>`).join("");
   if(ms) ms.innerHTML = MOTION_TYPES.map(m=>`<option value="${m}" ${m===libMotion?'selected':''}>${m==="All"?"Any movement":m}</option>`).join("");
   if(cs) cs.innerHTML = COLOR_FAMILIES.map(c=>`<option value="${c}" ${c===libColor?'selected':''}>${c==="All"?"Any color":c}</option>`).join("");
   if(hs){
@@ -736,6 +786,7 @@ function renderLib2(){
 function renderLibrary(){
   const list = PRESETS.filter(p=>
     (libCat==="All"||p.cat===libCat) &&
+    (libEnergy==="All"||energyLevel(p)===libEnergy) &&
     (libMotion==="All"||motionType(p)===libMotion) &&
     (libColor==="All"||colorFamily(p.cols)===libColor) &&
     (libCat!=="Holidays"||libHoliday==="All"||p.holiday===libHoliday));
@@ -754,11 +805,12 @@ function renderLibrary(){
     const badge = p.pattern ? `<span class="pill" style="position:absolute;top:8px;right:8px">${PATTERN_EMOJI[p.pattern]||"💫"} ${mtype}</span>`
                 : `<span class="pill" style="position:absolute;top:8px;right:8px;opacity:.85">${mtype==="Cycle"?"🔄":"⬤"} ${mtype}</span>`;
     const subtitle = grouped ? (p.holiday||p.cat) : p.cat;
+    const energy = energyLevel(p);
     return header + `<div class="card scell" style="position:relative" data-lib="${PRESETS.indexOf(p)}">
       ${badge}
       <div class="bar" style="background:linear-gradient(90deg,${grad})"></div>
       <div style="font-weight:800;font-size:14px;margin-top:8px">${p.name}</div>
-      <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${colorFamily(p.cols)}</div></div>`;
+      <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${colorFamily(p.cols)} · ${ENERGY_EMOJI[energy]} ${energy}</div></div>`;
   }).join("");
 }
 function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", origin:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth, bandCount:p.bandCount}; }
@@ -1119,6 +1171,7 @@ function showTab(name){
 document.querySelectorAll(".stab[data-tab]").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 showTab( location.hash.includes("tgt=") ? "timers" : ((location.hash.match(/#(scenes|timers|triggers)/)||[])[1] || "scenes") );
 renderLibFilter(); renderLib2(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
+$("#libenergy").onchange=()=>{ libEnergy=$("#libenergy").value; renderLibrary(); };
 $("#libmotion").onchange=()=>{ libMotion=$("#libmotion").value; renderLibrary(); };
 $("#libcolor").onchange=()=>{ libColor=$("#libcolor").value; renderLibrary(); };
 $("#libholiday").onchange=()=>{ libHoliday=$("#libholiday").value; renderLibrary(); };

@@ -700,7 +700,8 @@ async function stopSceneFor(ids){
   const tasks=[];
   if(segIds.length) tasks.push(fetch(CONFIG.PROXY_BASE+"/govee/segscene/stop",{method:"POST",
     headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify({devices:segIds})}));
-  if(otherIds.length) tasks.push(fetch(CONFIG.PROXY_BASE+"/govee/stop",{method:"POST",headers:{"X-Passcode":CONFIG.PASSCODE}}));
+  if(otherIds.length) tasks.push(fetch(CONFIG.PROXY_BASE+"/govee/stop",{method:"POST",
+    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},body:JSON.stringify({devices:otherIds})}));
   await Promise.allSettled(tasks);
 }
 

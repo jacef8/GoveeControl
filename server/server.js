@@ -195,10 +195,24 @@ app.post("/govee/scene", gate, async (req, res) => {
   try { await applyScene(req.body); res.json({ ok: true }); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
-app.post("/govee/stop", gate, (_req, res) => {
-  if (animTimer) { clearInterval(animTimer); animTimer = null; }
-  Object.keys(segAnimTimers).forEach(stopSegAnim);
-  Object.keys(breatheTimers).forEach(stopBreathe);
+app.post("/govee/stop", gate, (req, res) => {
+  // Scoped stop when the caller names specific devices — e.g. the client
+  // calling this to stop ONE light's built-in-scene tag must NOT also kill
+  // every OTHER light's unrelated running twinkle/chase/wave animation. Bug
+  // found 2026-07-08: this used to always clear ALL segAnimTimers/
+  // breatheTimers regardless of which device the caller meant, so a manual
+  // tweak to light A could silently freeze a twinkle scene mid-animation on
+  // light B anywhere else in the house — looking exactly like "it just
+  // stopped twinkling" with the light stuck on whatever partial colors its
+  // last successful tick had painted.
+  const only = Array.isArray(req.body?.devices) ? req.body.devices : null;
+  if (only && only.length) {
+    only.forEach((id) => { stopSegAnim(id); stopBreathe(id); });
+  } else {
+    if (animTimer) { clearInterval(animTimer); animTimer = null; }
+    Object.keys(segAnimTimers).forEach(stopSegAnim);
+    Object.keys(breatheTimers).forEach(stopBreathe);
+  }
   res.json({ ok: true });
 });
 

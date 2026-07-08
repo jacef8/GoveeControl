@@ -244,12 +244,16 @@
   .ld-debug summary{cursor:pointer; font-size:12.5px; color:var(--ink-faint); font-weight:600; list-style:none}
   .ld-debug summary::-webkit-details-marker{display:none}
   .ld-debug[open] summary{color:var(--ink-2); margin-bottom:2px}
+  .ld-scenesearch{width:100%; box-sizing:border-box; padding:10px 13px; margin-bottom:10px; border-radius:11px;
+    border:1px solid var(--glass-border); background:var(--sheen), var(--glass-tint); color:var(--ink); font:14px 'Inter',system-ui}
   .scenechips{display:flex; flex-wrap:wrap; gap:8px; margin-top:2px}
   .scenechip{border:1px solid var(--glass-border); background:var(--sheen), var(--glass-tint); color:var(--ink);
-    font:600 13px 'Inter',system-ui; padding:8px 13px; border-radius:11px; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.1)}
+    font:600 13px 'Inter',system-ui; padding:8px 13px 8px 9px; border-radius:11px; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.1);
+    display:inline-flex; align-items:center; gap:7px}
   .scenechip:active{transform:scale(.95)}
   .scenechip:disabled{opacity:.4; cursor:not-allowed}
   .scenechip.active{border-color:var(--accent); color:#fff; background:var(--sheen), color-mix(in srgb,var(--accent) 55%,var(--glass-tint))}
+  .scenedotmini{width:12px; height:12px; border-radius:50%; flex:0 0 auto; box-shadow:inset 0 1px 1px rgba(255,255,255,.35)}
   @keyframes tapflash{0%{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 65%,transparent)}100%{box-shadow:0 0 0 12px transparent}}
   .tapped{animation:tapflash .45s ease-out}
   /* ---------- snapshots strip ---------- */
@@ -802,6 +806,55 @@ async function refreshHealth(){
     LAST_HEALTH=await r.json(); renderLightDetail(); }catch{}
 }
 function closeLight(){ const ov=document.getElementById("liteOverlay"); if(ov) ov.style.display="none"; }
+// Govee's built-in-scene endpoint returns name+id only, no colors — guess a
+// preview palette from the name (same heuristic scenes.html's device-scenes
+// grid already uses) so a light's scene chips are visually distinguishable
+// instead of a flat wall of plain text (ported here, not shared, since the
+// two pages don't share a JS file).
+const THEME_PALETTES = [
+  [["firework","fire","flame","ember","lava"], ["#ff3b00","#ff8c00","#ffd000","#ff2d00"]],
+  [["valentine","love","heart","romantic","romance"], ["#ff2d6a","#ff7aa8","#ffd0e0","#d4537e"]],
+  [["party","carnival","dance","disco","colorful","celebrat","festiv","candy","sport"], ["#ff2d92","#00c7be","#ffd166","#5e8bff","#af52de"]],
+  [["candle","warm","dine","dinner","leisure","cozy","cabin"], ["#ff7a1e","#ff9d3c","#ffcf87","#e0531d"]],
+  [["forest","spring","refresh","nature","leaf","green","meadow","jungle"], ["#0f6e2e","#39a845","#8bd450","#1d9e75"]],
+  [["deep sea","undersea","ocean","sea","aqua","water","lake","marine","dive"], ["#062a4a","#0b4f9e","#1d9e75","#0a1e5e"]],
+  [["aurora","nebula","galaxy","star","universe","cosmic","milky","meteor"], ["#5e2ea8","#2e6be6","#00c7be","#af52de"]],
+  [["sunrise","morning","dawn"], ["#ff9d5c","#ffd08a","#ffe9b0","#8ec9ff"]],
+  [["sunset","dusk","afternoon","twilight","evening"], ["#ff5e62","#ff9966","#ffcf87","#9b5de5"]],
+  [["snow","winter","ice","frost","cold"], ["#bfe6ff","#7fbfff","#ffffff","#5e8bff"]],
+  [["night","midnight","dark","sleep","moon"], ["#0a1e5e","#123a7a","#1d9e75","#062038"]],
+  [["white","bright","daylight","clean"], ["#e8f0ff","#cfe0ff","#ffffff","#dfe8ff"]],
+  [["rainbow","spectrum","gradient","flow","spin","swing","fluctuat","stack"], ["#ff3b30","#ff9500","#ffd60a","#34c759","#0a84ff","#bf5af2"]],
+];
+function hashHue(str){ let h=0; for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))>>>0; return h%360; }
+function paletteFromName(name){
+  const n=(name||"").toLowerCase();
+  for(const [keys,pal] of THEME_PALETTES){ if(keys.some(k=>n.includes(k))) return pal; }
+  const b=hashHue(n); return [0,70,150,230].map(o=>`hsl(${(b+o)%360} 78% 56%)`);
+}
+// The device's built-in scene list can be huge (factory catalog + every DIY
+// scene ever created in the Govee app) — search + sort so it's actually
+// browsable, instead of one giant unsorted flex-wrap of plain-text chips
+// (jford screenshotted a light with 60+ scenes: "way too long a scrolling
+// list with no visible representation").
+function sceneChipsHTML(d){
+  const filter=(d._sceneFilter||"").toLowerCase().trim();
+  const withIdx=(d._scenes||[]).map((s,i)=>({s,i}));
+  const filtered=filter?withIdx.filter(({s})=>(s.name||"").toLowerCase().includes(filter)):withIdx;
+  const sorted=filtered.slice().sort((a,b)=>(a.s.name||"").localeCompare(b.s.name||""));
+  if(!sorted.length) return `<div class="ld-dim" style="padding:6px 2px">No scenes match "${filter}"</div>`;
+  return sorted.map(({s,i})=>{
+    const pal=paletteFromName(s.name);
+    return `<button class="scenechip" data-ldscene="${i}" ${d.online?'':'disabled'}>`
+      + `<span class="scenedotmini" style="background:linear-gradient(135deg,${pal.join(',')})"></span>${s.name}</button>`;
+  }).join("");
+}
+function attachSceneChips(card,d){
+  card.querySelectorAll("[data-ldscene]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
+    const s=(d._scenes||[])[+b.dataset.ldscene]; if(!s) return;
+    card.querySelectorAll(".scenechip.active").forEach(x=>x.classList.remove("active")); b.classList.add("active"); flashEl(b);
+    Govee.applyBuiltin(d.device,s.value,s.instance).catch(()=>{}); toast("Scene: "+s.name); });
+}
 // does this device expose addressable segments? (RGBIC strips) + how many
 function segInfo(d){
   const cap=(d.capabilities||[]).find(c=>c.type==="devices.capabilities.segment_color_setting");
@@ -879,7 +932,8 @@ function renderLightDetail(){
   const sc = d._scenes;
   const sceneSection = `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎬</span>Scenes</div>` + (
     (sc==null) ? `<div class="ld-dim">Loading scenes…</div>`
-    : (sc.length ? `<div class="scenechips">`+sc.map((s,i)=>`<button class="scenechip" data-ldscene="${i}" ${d.online?'':'disabled'}>${s.name}</button>`).join("")+`</div>`
+    : (sc.length ? `<input class="ld-scenesearch" type="text" placeholder="Search ${sc.length} scenes…" value="${(d._sceneFilter||"").replace(/"/g,"&quot;")}" data-ldscenesearch>`
+        + `<div class="scenechips" data-scenechips>${sceneChipsHTML(d)}</div>`
        : `<div class="ld-dim">No built-in scenes for this light.</div>`) ) + `</div>`;
   card.innerHTML = head + runningBanner + wholeBody(d) + segSection + sceneSection + debugSection(d,seg);
   const q=s=>card.querySelector(s);
@@ -888,10 +942,10 @@ function renderLightDetail(){
   const stopBtn=q("[data-ldstopscene]"); if(stopBtn) stopBtn.onclick=async()=>{ await stopSceneFor([d.device]); toast("Scene stopped"); render(); renderLightDetail(); };
   attachWhole(card,d);
   if(seg.supported) attachSub(card,d,seg);
-  card.querySelectorAll("[data-ldscene]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
-    const s=(d._scenes||[])[+b.dataset.ldscene]; if(!s) return;
-    b.parentElement.querySelectorAll(".active").forEach(x=>x.classList.remove("active")); b.classList.add("active"); flashEl(b);
-    Govee.applyBuiltin(d.device,s.value,s.instance).catch(()=>{}); toast("Scene: "+s.name); });
+  attachSceneChips(card,d);
+  const sceneSearch=q("[data-ldscenesearch]");
+  if(sceneSearch) sceneSearch.oninput=()=>{ d._sceneFilter=sceneSearch.value;
+    const box=q("[data-scenechips]"); if(box){ box.innerHTML=sceneChipsHTML(d); attachSceneChips(card,d); } };
 }
 function wholeBody(d){
   const bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;

@@ -25,6 +25,9 @@
     --glass-border:rgba(255,255,255,.15); --glass-border-soft:rgba(255,255,255,.09);
     --sheen:linear-gradient(160deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.03) 32%, rgba(255,255,255,0) 58%);
     --blur:22px;
+    /* Govee-app header gradient + accent (matches the official app's look) */
+    --gv-header-grad:radial-gradient(140% 200% at 24% -60%, #8577ff 0%, #6355e0 20%, #372f8c 42%, #171335 68%, var(--surface) 100%);
+    --gv-cyan:#29c3f0; --gv-cyan-2:#17a3dd;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
@@ -33,9 +36,8 @@
   body{display:flex; flex-direction:column}
   /* ---------- top bar ---------- */
   header{position:sticky; top:0; z-index:20; flex:0 0 auto; display:flex; flex-direction:column; gap:11px;
-    padding:calc(11px + env(safe-area-inset-top)) 16px 12px; border-bottom:1px solid var(--glass-border-soft);
-    background:var(--sheen), color-mix(in srgb,var(--surface) 72%, transparent);
-    backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%)}
+    padding:calc(11px + env(safe-area-inset-top)) 16px 16px; border-bottom-left-radius:22px; border-bottom-right-radius:22px;
+    background:var(--gv-header-grad); box-shadow:0 10px 30px -10px rgba(70,50,220,.35)}
   .appbar{display:flex; align-items:center; gap:10px}
   .brand{flex:1; display:flex; align-items:center; gap:11px; font-size:20px; font-weight:750; letter-spacing:-.4px; color:var(--ink)}
   .logo{width:30px;height:30px;border-radius:10px;background:
@@ -236,7 +238,19 @@
   .seg-cell:active{transform:scale(.9)}
   .ld-actions{display:flex; gap:9px}
   .ld-act{flex:1; border:1px solid var(--glass-border); background:var(--sheen), var(--glass-tint); color:var(--ink);
-    font:650 14px 'Inter',system-ui; padding:12px; border-radius:12px; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+    font:650 14px 'Inter',system-ui; padding:12px; border-radius:12px; cursor:pointer; box-shadow:inset 0 1px 0 rgba(255,255,255,.12);
+    text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px; text-align:center}
+  /* Govee-app-style mode tab bar (Color/Scene/Effects/Music) — rounded-square
+     icon buttons, active one filled with the cyan accent, matching the real
+     Govee app's Music/Color/Scene/DIY switcher. */
+  .ldm-tabs{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0 16px}
+  .ldm-tab{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+    padding:12px 4px; border-radius:14px; border:1px solid var(--glass-border-soft); cursor:pointer;
+    background:var(--surface-2); color:var(--ink-2); font:650 12px 'Inter',system-ui; transition:transform .12s}
+  .ldm-tab .ico2{font-size:19px; line-height:1}
+  .ldm-tab:active{transform:scale(.95)}
+  .ldm-tab.active{background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2)); color:#052730;
+    box-shadow:0 8px 20px -8px rgba(41,195,240,.6), inset 0 1px 0 rgba(255,255,255,.35)}
   .ld-act:active{transform:scale(.96)}
   .ld-act:disabled{opacity:.4; cursor:not-allowed}
   .ld-dim{color:var(--ink-faint); font-size:13px; margin-top:8px}
@@ -688,6 +702,7 @@ const ActiveScene = {
   get(id){ return this.all()[id]; },
   clearMany(ids){ const a=this.all(); let ch=false; ids.forEach(id=>{ if(a[id]){ delete a[id]; ch=true; } });
     if(ch) localStorage.setItem("gv_active_scene", JSON.stringify(a)); },
+  mark(id,name,pattern){ const a=this.all(); a[id]={name,pattern,ts:Date.now()}; localStorage.setItem("gv_active_scene", JSON.stringify(a)); },
 };
 const SEG_PATTERNS = ["chase","wave","strobe","bounce","twinkle"];
 async function stopSceneFor(ids){
@@ -838,6 +853,49 @@ function paletteFromName(name){
 // browsable, instead of one giant unsorted flex-wrap of plain-text chips
 // (jford screenshotted a light with 60+ scenes: "way too long a scrolling
 // list with no visible representation").
+// Photo-to-palette (our version of Govee's "Effects Lab" photo color gallery
+// — we don't have their curated photo library, so instead: pick any photo,
+// pull its dominant colors straight off the pixels, apply as a scene).
+// Downscales to a small canvas and buckets pixels into coarse RGB cells so a
+// handful of DOMINANT colors fall out, rather than every unique pixel value.
+function extractPalette(img, n){
+  const W=48, H=48;
+  const c=document.createElement("canvas"); c.width=W; c.height=H;
+  const ctx=c.getContext("2d"); ctx.drawImage(img,0,0,W,H);
+  const data=ctx.getImageData(0,0,W,H).data;
+  const buckets={};
+  for(let i=0;i<data.length;i+=4){
+    if(data[i+3]<128) continue;   // skip transparent pixels
+    const r=data[i], g=data[i+1], b=data[i+2];
+    const key=Math.round(r/32)+","+Math.round(g/32)+","+Math.round(b/32);
+    const bk=buckets[key] ||= {r:0,g:0,b:0,n:0};
+    bk.r+=r; bk.g+=g; bk.b+=b; bk.n++;
+  }
+  return Object.values(buckets).sort((a,b)=>b.n-a.n).slice(0,n)
+    .map(v=>[Math.round(v.r/v.n), Math.round(v.g/v.n), Math.round(v.b/v.n)]);
+}
+async function applyPhotoScene(d){
+  const pal=d._photoPalette; if(!pal || !pal.length) return;
+  if(CONFIG.USE_MOCK){ toast("Demo mode — connect in Settings to actually apply this"); return; }
+  await stopSceneFor([d.device]);
+  const seg=segInfo(d);
+  try{
+    if(seg.supported){
+      const r=await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",
+        headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+        body:JSON.stringify({devices:[d.device], pattern:"wave", cols:pal, step:550})});
+      if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error || ("HTTP "+r.status));
+      ActiveScene.mark(d.device,"Photo Palette","wave");
+    } else {
+      const r=await fetch(CONFIG.PROXY_BASE+"/govee/scene",{method:"POST",
+        headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+        body:JSON.stringify({name:"Photo Palette", targets:[d.deviceName], cols:pal, motion:true, step:1800})});
+      if(!r.ok) throw new Error((await r.json().catch(()=>({}))).error || ("HTTP "+r.status));
+      ActiveScene.mark(d.device,"Photo Palette","cycle");
+    }
+    toast("Applied photo palette to "+d.deviceName); render(); renderLightDetail();
+  }catch(e){ toast("Failed to apply photo palette: "+e.message, true); }
+}
 function sceneChipsHTML(d){
   const filter=(d._sceneFilter||"").toLowerCase().trim();
   const withIdx=(d._scenes||[]).map((s,i)=>({s,i}));
@@ -929,24 +987,60 @@ function renderLightDetail(){
         <div style="font-size:12px;color:var(--ink-faint);margin-top:1px">This light's color is being driven by a scene, not a fixed color.</div></div>
       <button class="ld-act" data-ldstopscene style="flex:0 0 auto;padding:9px 14px">Stop</button>
     </div>` : "";
-  const segSection = seg.supported ? `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🧩</span>Sections of this strip</div>${subBody(d,seg)}</div>` : "";
   const sc = d._scenes;
-  const sceneSection = `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎬</span>Scenes</div>` + (
+  const sceneTabHTML = `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎬</span>Built-in scenes</div>` + (
     (sc==null) ? `<div class="ld-dim">Loading scenes…</div>`
     : (sc.length ? `<input class="ld-scenesearch" type="text" placeholder="Search ${sc.length} scenes…" value="${(d._sceneFilter||"").replace(/"/g,"&quot;")}" data-ldscenesearch>`
         + `<div class="scenechips" data-scenechips>${sceneChipsHTML(d)}</div>`
        : `<div class="ld-dim">No built-in scenes for this light.</div>`) ) + `</div>`;
-  card.innerHTML = head + runningBanner + wholeBody(d) + segSection + sceneSection + debugSection(d,seg);
+  const tab = d._ldTab || "color";
+  const pane=(name,html)=>`<div class="ldm-pane" data-ldpane="${name}" style="display:${tab===name?'':'none'}">${html}</div>`;
+  const tabBar = `<div class="ldm-tabs">
+    <div class="ldm-tab ${tab==='color'?'active':''}" data-ldtab="color"><span class="ico2">🎨</span>Color</div>
+    <div class="ldm-tab ${tab==='scene'?'active':''}" data-ldtab="scene"><span class="ico2">🎬</span>Scene</div>
+    <div class="ldm-tab ${tab==='effects'?'active':''}" data-ldtab="effects"><span class="ico2">✨</span>Effects</div>
+    <div class="ldm-tab ${tab==='music'?'active':''}" data-ldtab="music"><span class="ico2">🎵</span>Music</div>
+  </div>`;
+  card.innerHTML = head + runningBanner + tabBar
+    + pane("color", wholeBody(d))
+    + pane("scene", sceneTabHTML)
+    + pane("effects", effectsPaneHTML(d,seg))
+    + pane("music", musicPaneHTML(d))
+    + debugSection(d,seg);
   const q=s=>card.querySelector(s);
   q("[data-ldclose]").onclick=closeLight;
   q("[data-pwr]").onclick=()=>{ if(!d.online) return toast("Light is offline",true); const nx=!d._state.on; d._state.on=nx; Govee.setPower(d.device,nx).catch(()=>{}); render(); renderLightDetail(); };
   const stopBtn=q("[data-ldstopscene]"); if(stopBtn) stopBtn.onclick=async()=>{ await stopSceneFor([d.device]); toast("Scene stopped"); render(); renderLightDetail(); };
+  card.querySelectorAll("[data-ldtab]").forEach(b=>b.onclick=()=>{
+    d._ldTab=b.dataset.ldtab;
+    card.querySelectorAll("[data-ldtab]").forEach(x=>x.classList.toggle("active", x.dataset.ldtab===d._ldTab));
+    card.querySelectorAll(".ldm-pane").forEach(p=>p.style.display = p.dataset.ldpane===d._ldTab ? "" : "none");
+  });
+  const photoApply=q("[data-ldphotoapply]"); if(photoApply) photoApply.onclick=()=>applyPhotoScene(d);
   attachWhole(card,d);
   if(seg.supported) attachSub(card,d,seg);
   attachSceneChips(card,d);
   const sceneSearch=q("[data-ldscenesearch]");
   if(sceneSearch) sceneSearch.oninput=()=>{ d._sceneFilter=sceneSearch.value;
     const box=q("[data-scenechips]"); if(box){ box.innerHTML=sceneChipsHTML(d); attachSceneChips(card,d); } };
+  const photoInp=q("[data-ldphoto]");
+  if(photoInp) photoInp.onchange=()=>{
+    const file=photoInp.files[0]; if(!file) return;
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      d._photoPalette=extractPalette(img,5);
+      URL.revokeObjectURL(url);
+      const box=q("[data-photopal]");
+      if(box) box.innerHTML = d._photoPalette.map(([r,g,b])=>
+        `<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("")
+        + `<button class="ld-act" data-ldphotoapply style="flex:0 0 auto;padding:9px 14px">Cycle these</button>`;
+      card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ stopSceneFor([d.device]); const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; touch(d); setColorEverywhere(d,v).catch(()=>{}); toast("Color set"); render(); renderLightDetail(); });
+      const applyBtn=q("[data-ldphotoapply]"); if(applyBtn) applyBtn.onclick=()=>applyPhotoScene(d);
+      toast("Palette extracted — tap a swatch, or Cycle these");
+    };
+    img.src=url;
+  };
 }
 function wholeBody(d){
   const bri=d._state.brightness, hue=rgbToHue(d._state.color), temp=d._state.colorTemp||4500;
@@ -962,12 +1056,33 @@ function wholeBody(d){
     <div class="ld-card"><div class="ld-hdr2"><span class="ico">🌡️</span>White / temperature<span class="ld-val" data-ldtempval>${temp}K</span></div>
       <input type="range" class="tempbar" min="2000" max="9000" step="100" value="${temp}" data-ldtemp ${d.online?'':'disabled'}>
       <div class="ld-whites">${whites}</div>
-    </div>
-    <div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Effects</div>
+    </div>`;
+}
+function effectsPaneHTML(d,seg){
+  const segCard = seg.supported ? `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🧩</span>Sections of this strip</div>${subBody(d,seg)}</div>` : "";
+  const pal = d._photoPalette;
+  const palRow = pal ? pal.map(([r,g,b])=>`<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("")
+      + `<button class="ld-act" data-ldphotoapply style="flex:0 0 auto;padding:9px 14px">Cycle these</button>` : "";
+  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
       <div class="ld-actions">
         <button class="ld-act" data-ldflash ${d.online?'':'disabled'}>Flash</button>
         <button class="ld-act" data-ldrandom ${d.online?'':'disabled'}>Random color</button>
-      </div></div>`;
+      </div></div>
+    ${segCard}
+    <div class="ld-card"><div class="ld-hdr2"><span class="ico">🖼️</span>Photo palette</div>
+      <div class="ld-dim" style="margin-bottom:10px">Pick a photo — we'll pull its dominant colors and turn them into a scene for this light.</div>
+      <input type="file" accept="image/*" data-ldphoto style="display:block;margin-bottom:10px;width:100%;color:var(--ink-2);font-size:13px">
+      <div class="ld-sws" data-photopal>${palRow}</div>
+    </div>`;
+}
+function musicPaneHTML(d){
+  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎵</span>Music</div>
+    <div class="ld-dim" style="margin-bottom:12px">True mic-reactive sync isn't realistic over the cloud API (real round-trip lag would make it stutter, not pulse) — these launch a fast preset instead of listening live.</div>
+    <div class="ld-actions">
+      <a class="ld-act" href="scenes.html#scenetgt=dev:${d.device}&quicklaunch=party">🎉 Party</a>
+      <a class="ld-act" href="scenes.html#scenetgt=dev:${d.device}&quicklaunch=dynamic">⚡ Dynamic</a>
+      <a class="ld-act" href="scenes.html#scenetgt=dev:${d.device}&quicklaunch=calm">🌙 Calm</a>
+    </div></div>`;
 }
 function attachWhole(card,d){
   const q=s=>card.querySelector(s);

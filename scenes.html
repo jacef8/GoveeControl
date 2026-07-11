@@ -25,16 +25,18 @@
     --glass-border:rgba(255,255,255,.15); --glass-border-soft:rgba(255,255,255,.09);
     --sheen:linear-gradient(160deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.03) 32%, rgba(255,255,255,0) 58%);
     --blur:22px;
+    /* Govee-app header gradient + accent (matches the official app's look) */
+    --gv-header-grad:radial-gradient(140% 200% at 24% -60%, #8577ff 0%, #6355e0 20%, #372f8c 42%, #171335 68%, var(--surface) 100%);
+    --gv-cyan:#29c3f0; --gv-cyan-2:#17a3dd;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
     font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; line-height:1.5;
     background:var(--bg); background-attachment:fixed}
   body{display:flex; flex-direction:column}
-  header{position:sticky; top:0; z-index:20; flex:0 0 auto; padding:calc(11px + env(safe-area-inset-top)) 16px 12px;
-    display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--glass-border-soft);
-    background:var(--sheen), color-mix(in srgb,var(--surface) 72%, transparent);
-    backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%)}
+  header{position:sticky; top:0; z-index:20; flex:0 0 auto; padding:calc(11px + env(safe-area-inset-top)) 16px 16px;
+    display:flex; align-items:center; gap:10px; border-bottom-left-radius:22px; border-bottom-right-radius:22px;
+    background:var(--gv-header-grad); box-shadow:0 10px 30px -10px rgba(70,50,220,.35)}
   header h1{font-size:20px; margin:0; font-weight:750; letter-spacing:-.4px; flex:1; display:flex; align-items:center; gap:11px; color:var(--ink)}
   .logo{width:30px;height:30px;border-radius:10px;background:
     conic-gradient(from 210deg,#ff5e5e,#ffd166,#39d98a,#4f7cff,#b66bff,#ff5e5e); box-shadow:0 2px 10px rgba(120,140,255,.4), inset 0 1px 1px rgba(255,255,255,.5)}
@@ -123,8 +125,8 @@
     border-bottom:1px solid var(--glass-border-soft); padding:8px 10px}
   .stab{flex:1; appearance:none; border:1px solid transparent; background:transparent; color:var(--ink-2); font:600 14px 'Inter',system-ui;
     padding:10px 6px; border-radius:12px; cursor:pointer; text-decoration:none; text-align:center; transition:background .2s, color .2s}
-  .stab.active{color:#fff; background:var(--sheen), linear-gradient(90deg,rgba(138,123,255,.65),rgba(80,140,255,.6));
-    box-shadow:0 5px 20px -5px rgba(120,110,255,.7), inset 0 1px 0 rgba(255,255,255,.22)}
+  .stab.active{color:#052730; background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2));
+    box-shadow:0 5px 20px -5px rgba(41,195,240,.6), inset 0 1px 0 rgba(255,255,255,.3)}
   .stab:active{background:var(--glass-tint)}
   .tabpanel[hidden]{display:none}
   /* apply-target picker (multi-select) */
@@ -788,7 +790,7 @@ const PRESETS = [
 let libCat = "All", libEnergy = "All", libMotion = "All", libColor = "All", libHoliday = "All";
 function renderLibFilter(){
   $("#glibfilter").innerHTML = LIB_CATS.map(c=>
-    `<button class="ex" data-libcat="${c}" style="${c===libCat?'border-color:var(--accent);color:#9bb4ff;background:#13203f':''}">${c}</button>`).join("");
+    `<button class="ex" data-libcat="${c}" style="${c===libCat?'border-color:var(--gv-cyan);color:#052730;background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2));font-weight:700':''}">${c}</button>`).join("");
 }
 function renderLib2(){
   const es=$("#libenergy"), ms=$("#libmotion"), cs=$("#libcolor"), hs=$("#libholiday");
@@ -1191,6 +1193,16 @@ function applySceneTargetHash(){
   const opt=$("#gtarget")?.selectedOptions[0];
   msg("Scenes apply straight to "+(opt?opt.textContent:"this light")+" — no picker needed");
 }
+// Music-tab quick-launch (index.html light detail → Music tab → Party/Dynamic/
+// Calm) — fires an existing fast preset straight at whatever #scenetgt just
+// set, instead of a real mic-reactive sync (not realistic over the cloud API).
+const QUICKLAUNCH_MAP = {party:"Party Pulse", dynamic:"Rave", calm:"Moonlight"};
+function applyQuickLaunchHash(){
+  const m=(location.hash||"").match(/quicklaunch=([^&]+)/); if(!m) return;
+  const name=QUICKLAUNCH_MAP[decodeURIComponent(m[1])]; if(!name) return;
+  const p=PRESETS.find(x=>x.name===name); if(!p) return;
+  applyOrPick(presetToScene(p),"library");
+}
 /* ---------- top-level tabs (Scenes / Timers / Triggers) ---------- */
 function showTab(name){
   if(!["scenes","timers","triggers"].includes(name)) name="scenes";
@@ -1200,7 +1212,7 @@ function showTab(name){
 }
 document.querySelectorAll(".stab[data-tab]").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 showTab( /(?:^|[#&])tgt=grp:/.test(location.hash) ? "timers" : ((location.hash.match(/#(scenes|timers|triggers)/)||[])[1] || "scenes") );
-renderLibFilter(); renderLib2(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); applySceneTargetHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
+renderLibFilter(); renderLib2(); renderLibrary(); loadSGroups().then(()=>{ renderAuto(); renderTargets(); applyTimerHash(); applySceneTargetHash(); applyQuickLaunchHash(); }); renderTeam(); renderTriggers(); renderTrigActs();
 $("#libenergy").onchange=()=>{ libEnergy=$("#libenergy").value; renderLibrary(); };
 $("#libmotion").onchange=()=>{ libMotion=$("#libmotion").value; renderLibrary(); };
 $("#libcolor").onchange=()=>{ libColor=$("#libcolor").value; renderLibrary(); };

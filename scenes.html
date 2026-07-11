@@ -99,6 +99,14 @@
     background:var(--sheen), color-mix(in srgb,var(--surface) 72%, transparent); backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
     font-size:13px; color:var(--ink-2); display:flex; gap:8px}
   .badge{margin-left:auto; background:color-mix(in srgb,#f5a623 18%,var(--glass-tint)); color:#ffd166; font-weight:600; font-size:12px; border:1px solid color-mix(in srgb,#f5a623 40%,transparent); padding:4px 11px; border-radius:8px}
+  /* impossible-to-miss demo-mode banner — a small footer badge alone kept
+     confusing people into thinking sample data was their real lights/scenes */
+  #demobanner{display:none; align-items:center; gap:12px; padding:13px 16px; margin:14px 18px 0;
+    background:color-mix(in srgb,#f5a623 16%,var(--surface-2)); border:1px solid color-mix(in srgb,#f5a623 45%,transparent);
+    border-radius:14px; color:#ffd166; font-size:13.5px}
+  #demobanner b{color:#ffe6a8}
+  #demobanner button{flex:0 0 auto; border:0; background:#f5a623; color:#241704; font-weight:700; font-size:13px;
+    padding:9px 15px; border-radius:10px; cursor:pointer}
   /* tap feedback + active state + toast */
   @keyframes tapflash{0%{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 65%,transparent)}100%{box-shadow:0 0 0 12px transparent}}
   .tapped{animation:tapflash .45s ease-out}
@@ -162,6 +170,10 @@
     <button class="stab" data-tab="timers">Timers</button>
     <button class="stab" data-tab="triggers">Triggers</button>
   </nav>
+  <div id="demobanner">
+    <div><b>Demo mode</b> — showing sample scenes, not yours. Connect your Railway URL + passcode to see the real thing.</div>
+    <button id="demoConnectBtn">Connect now</button>
+  </div>
 
   <main>
     <!-- ============ SCENES ============ -->
@@ -1172,6 +1184,8 @@ document.addEventListener("click", async e=>{
   const aue=e.target.closest("[data-auedit]"); if(aue){ const a=AUTO.find(x=>x.id===aue.dataset.auedit); if(a) openEditAuto(a); return; }
 });
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
+const demobanner=$("#demobanner"); if(demobanner) demobanner.style.display = CONFIG.USE_MOCK ? "flex" : "none";
+$("#demoConnectBtn")?.addEventListener("click", ()=>document.querySelector("[data-cfg]")?.click());
 function applyTimerHash(){
   const m=(location.hash||"").match(/(?:^|[#&])tgt=grp:([^&]+)/); if(!m) return;
   if(typeof showTab==="function") showTab("timers");

@@ -153,6 +153,14 @@
   .badge{margin-left:auto; padding:4px 11px;border-radius:9px;
     background:color-mix(in srgb,#f5a623 18%,var(--glass-tint));color:#ffd166;
     font-weight:600;font-size:12px; border:1px solid color-mix(in srgb,#f5a623 40%,transparent)}
+  /* impossible-to-miss demo-mode banner — a small footer badge alone kept
+     confusing people into thinking sample data was their real lights */
+  #demobanner{display:none; align-items:center; gap:12px; padding:13px 16px; margin:14px 16px 0;
+    background:color-mix(in srgb,#f5a623 16%,var(--surface-2)); border:1px solid color-mix(in srgb,#f5a623 45%,transparent);
+    border-radius:14px; color:#ffd166; font-size:13.5px}
+  #demobanner b{color:#ffe6a8}
+  #demobanner button{flex:0 0 auto; border:0; background:#f5a623; color:#241704; font-weight:700; font-size:13px;
+    padding:9px 15px; border-radius:10px; cursor:pointer}
   .empty{color:var(--ink-2); text-align:center; padding:60px 20px; font-size:15px}
   /* ---------- bento dashboard ---------- */
   .summary{font-size:14px; color:var(--ink-2); font-weight:500; margin:2px 4px 16px}
@@ -342,6 +350,10 @@
     </div>
   </header>
 
+  <div id="demobanner">
+    <div><b>Demo mode</b> — showing sample lights, not yours. Connect your Railway URL + passcode to see the real thing.</div>
+    <button id="demoConnectBtn">Connect now</button>
+  </div>
   <div id="snaps" class="snaps"></div>
   <main id="app"><div class="empty">Loading lights…</div></main>
 
@@ -752,6 +764,8 @@ async function load(){
   }
 }
 $("#modebadge").style.display = CONFIG.USE_MOCK ? "" : "none";
+const demobanner=$("#demobanner"); if(demobanner) demobanner.style.display = CONFIG.USE_MOCK ? "flex" : "none";
+$("#demoConnectBtn")?.addEventListener("click", ()=>document.querySelector("[data-cfg]")?.click());
 load();
 setInterval(load, CONFIG.POLL_MS);
 

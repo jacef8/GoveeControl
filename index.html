@@ -1038,6 +1038,13 @@ function renderLightDetail(){
     card.querySelectorAll(".ldm-pane").forEach(p=>p.style.display = p.dataset.ldpane===d._ldTab ? "" : "none");
   });
   const photoApply=q("[data-ldphotoapply]"); if(photoApply) photoApply.onclick=()=>applyPhotoScene(d);
+  card.querySelectorAll("[data-twinkleswatch]").forEach(b=>b.onclick=()=>{ d._twinkleColor=+b.dataset.twinkleswatch;
+    const pick=q("[data-twinklepick]"); if(pick) pick.value=rgbHex(d._twinkleColor); flashEl(b); });
+  const twPick=q("[data-twinklepick]"); if(twPick) twPick.oninput=()=>{ d._twinkleColor=hexInt(twPick.value); };
+  const twSpeed=q("[data-twinklespeed]"); if(twSpeed) twSpeed.oninput=()=>{ const lvl=+twSpeed.value; d._twinkleSpeedLvl=lvl;
+    twSpeed.style.setProperty("--p",(lvl-1)/9*100+"%"); const lab=q("[data-twinklespeedval]"); if(lab) lab.textContent=TWINKLE_SPEED_LABELS[lvl]; };
+  const twStart=q("[data-twinklestart]"); if(twStart) twStart.onclick=()=>startTwinkle(d);
+  const twStop=q("[data-twinklestop]"); if(twStop) twStop.onclick=async()=>{ await stopSceneFor([d.device]); toast("Twinkle stopped"); render(); renderLightDetail(); };
   attachWhole(card,d);
   if(seg.supported) attachSub(card,d,seg);
   attachSceneChips(card,d);
@@ -1079,12 +1086,47 @@ function wholeBody(d){
       <div class="ld-whites">${whites}</div>
     </div>`;
 }
+// Speed is exposed as a 1-10 "level" (right = faster), not raw milliseconds —
+// converted to the engine's stepMs here so the slider reads naturally.
+const TWINKLE_SPEED_LABELS = {1:"Very slow",2:"Very slow",3:"Slow",4:"Slow",5:"Medium",6:"Medium",7:"Brisk",8:"Fast",9:"Fast",10:"Very fast"};
+function twinkleStepMs(lvl){ return Math.round(1500 - (lvl-1)*130); }
+function twinkleCardHTML(d){
+  const color = d._twinkleColor ?? 0xffb454;   // warm amber — the classic "fairy light" glow
+  const lvl = d._twinkleSpeedLvl || 6;
+  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-twinkleswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
+  const running = ActiveScene.get(d.device)?.pattern === "twinkle";
+  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">✨</span>Twinkle${running?'<span class="ld-val" style="color:#7cf5b8">Running</span>':''}</div>
+    <div class="ld-dim" style="margin-bottom:10px">A slow glowing fade, like fairy lights — pick a color and speed, then start it on this light.</div>
+    <div class="ld-sws">${swatches}<input type="color" class="swatch picker" value="${rgbHex(color)}" data-twinklepick ${d.online?'':'disabled'} title="Custom twinkle color"></div>
+    <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-twinklespeedval>${TWINKLE_SPEED_LABELS[lvl]}</span></div>
+    <input type="range" min="1" max="10" value="${lvl}" data-twinklespeed ${d.online?'':'disabled'} style="--p:${(lvl-1)/9*100}%">
+    <div class="ld-actions" style="margin-top:12px">
+      <button class="ld-act" data-twinklestart ${d.online?'':'disabled'}>▶ Start Twinkle</button>
+      <button class="ld-act" data-twinklestop ${d.online?'':'disabled'}>■ Stop</button>
+    </div></div>`;
+}
+async function startTwinkle(d){
+  if(CONFIG.USE_MOCK){ toast("Demo mode — connect in Settings to actually run this"); return; }
+  await stopSceneFor([d.device]);
+  const color = d._twinkleColor ?? 0xffb454;
+  const {r,g,b} = Govee.intToRgb(color);
+  const step = twinkleStepMs(d._twinkleSpeedLvl || 6);
+  try{
+    const res=await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",
+      headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+      body:JSON.stringify({devices:[d.device], pattern:"twinkle", cols:[[r,g,b]], step})});
+    if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ("HTTP "+res.status));
+    ActiveScene.mark(d.device,"Twinkle","twinkle");
+    toast("Twinkle started on "+d.deviceName); render(); renderLightDetail();
+  }catch(e){ toast("Couldn't start Twinkle: "+e.message, true); }
+}
 function effectsPaneHTML(d,seg){
   const segCard = seg.supported ? `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🧩</span>Sections of this strip</div>${subBody(d,seg)}</div>` : "";
   const pal = d._photoPalette;
   const palRow = pal ? pal.map(([r,g,b])=>`<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("")
       + `<button class="ld-act" data-ldphotoapply style="flex:0 0 auto;padding:9px 14px">Cycle these</button>` : "";
-  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
+  return twinkleCardHTML(d)
+    + `<div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
       <div class="ld-actions">
         <button class="ld-act" data-ldflash ${d.online?'':'disabled'}>Flash</button>
         <button class="ld-act" data-ldrandom ${d.online?'':'disabled'}>Random color</button>

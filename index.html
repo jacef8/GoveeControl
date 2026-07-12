@@ -30,12 +30,19 @@
     --gv-cyan:#29c3f0; --gv-cyan-2:#17a3dd;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
+  html,body{margin:0; min-height:var(--avh); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; line-height:1.5;
     background:var(--bg); background-attachment:fixed}
   body{display:flex; flex-direction:column}
-  /* ---------- top bar ---------- */
-  header{position:sticky; top:0; z-index:20; flex:0 0 auto; display:flex; flex-direction:column; gap:11px;
+  /* ---------- top bar ----------
+     The header (brand + the 8-button grid) used to be position:sticky with
+     ONLY <main> scrolling underneath it — as the grid/banner/snaps stack grew
+     across several changes, that fixed chrome ate more and more of the
+     screen, leaving a shrinking scrollable strip below it (jford: "only half
+     the screen is scrolling"). Simplified to match the same fix already
+     applied to scenes.html: nothing is pinned, the WHOLE page (header, grid,
+     banner, snaps, lights) scrolls together as one normal unit. */
+  header{z-index:20; flex:0 0 auto; display:flex; flex-direction:column; gap:11px;
     padding:calc(11px + env(safe-area-inset-top)) 16px 16px; border-bottom-left-radius:22px; border-bottom-right-radius:22px;
     background:var(--gv-header-grad); box-shadow:0 10px 30px -10px rgba(70,50,220,.35)}
   .appbar{display:flex; align-items:center; gap:10px}
@@ -75,8 +82,8 @@
   .home-btn.on{color:#7cf5b8; background:var(--sheen), color-mix(in srgb,var(--on) 22%,var(--glass-tint)); border-color:color-mix(in srgb,var(--on) 45%,var(--glass-border))}
   .home-btn.off{color:#ff9aa4; background:var(--sheen), color-mix(in srgb,var(--off) 20%,var(--glass-tint)); border-color:color-mix(in srgb,var(--off) 45%,var(--glass-border))}
   .appbar [data-cfg]{display:none}
-  /* ---------- scroll body ---------- */
-  main{flex:1 1 auto; overflow:auto; padding:18px 16px 34px; -webkit-overflow-scrolling:touch}
+  /* ---------- body content (part of the normal page scroll now, see header comment above) ---------- */
+  main{flex:0 0 auto; padding:18px 16px 34px; -webkit-overflow-scrolling:touch}
   .grpttl{font-size:17px; font-weight:700; color:var(--ink); margin:24px 4px 13px; letter-spacing:-.3px;
     display:flex; align-items:center; gap:10px}
   .grpttl:first-child{margin-top:4px}

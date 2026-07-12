@@ -63,6 +63,14 @@
     font:650 14.5px 'Inter',system-ui; padding:12px 17px; border-radius:13px; cursor:pointer; transition:transform .15s, background .2s;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
   .btn:active{transform:scale(.96)}
+  .btn:disabled{opacity:.6; cursor:wait}
+  @keyframes gvspin{to{transform:rotate(360deg)}}
+  .gv-spinner{display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,.35); border-top-color:#fff;
+    border-radius:50%; animation:gvspin .7s linear infinite; vertical-align:-2px; margin-right:6px; flex:0 0 auto}
+  #gstatus{font-size:12.5px; margin-top:9px; min-height:16px; display:flex; align-items:center; gap:2px; color:var(--ink-faint)}
+  #gstatus.busy{color:var(--accent)}
+  #gstatus.err{color:#ff8a8a}
+  #gstatus.ok{color:#7cf5b8}
   .btn.blue{border-color:transparent; color:#fff; background:linear-gradient(160deg,rgba(255,255,255,.25),transparent 60%),var(--accent)}
   .btn.green{border-color:color-mix(in srgb,var(--on) 45%,transparent); color:#7cf5b8; background:var(--sheen), color-mix(in srgb,var(--on) 18%,var(--glass-tint))}
   .row{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
@@ -195,6 +203,7 @@
         <button id="gmic" class="btn" title="Speak your scene">🎤 Speak</button>
         <span style="font-size:12px;color:var(--ink-faint)">or press Enter</span>
       </div>
+      <div id="gstatus"></div>
       <div id="gchips" class="row" style="margin-top:9px"></div>
       <div id="gpreview" style="margin-top:13px"></div>
 
@@ -355,7 +364,9 @@ async function designScene(prompt){
     const r = await fetch(CONFIG.PROXY_BASE+"/ai/scene",{method:"POST",
       headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
       body:JSON.stringify({prompt})});
-    return (await r.json()).scene;
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok || !j.scene) throw new Error(j.error || `AI scene request failed (${r.status})`);
+    return j.scene;
   }
   // ---- mock "AI": keyword match into a Scene ----
   const t=(prompt||"").toLowerCase();
@@ -1141,10 +1152,24 @@ function renderTriggers(){
     <button class="ex" data-trdel="${t.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:8px">✕</button></div>`).join("");
 }
 $("#ggen").onclick=async(ev)=>{ const p=$("#gp").value||"multicolored moving party";
-  flashEl(ev&&ev.currentTarget); toast("Generating scene…"); msg("Generating scene…");
-  const s=await designScene(p); s.origin="ai"; renderPreview(s);
-  msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`);
-  applyOrPick(s,"library"); };
+  flashEl(ev&&ev.currentTarget);
+  const btn=$("#ggen"), st=$("#gstatus");
+  btn.disabled=true; btn.textContent="✨ Generating…";
+  st.className="busy"; st.innerHTML='<span class="gv-spinner"></span>Asking Claude to design this scene — usually takes a few seconds…';
+  toast("Generating scene…"); msg("Generating scene…");
+  try{
+    const s=await designScene(p); s.origin="ai"; renderPreview(s);
+    st.className="ok"; st.textContent=`✓ Generated "${s.name}" — see the preview below`;
+    msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`);
+    $("#gpreview")?.scrollIntoView({behavior:"smooth", block:"nearest"});
+    applyOrPick(s,"library");
+  }catch(e){
+    st.className="err"; st.textContent="✕ Couldn't generate a scene: "+e.message;
+    toast("Scene generation failed: "+e.message, true); msg("Scene generation failed: "+e.message);
+  }finally{
+    btn.disabled=false; btn.textContent="✨ Generate scene";
+  }
+};
 $("#gp").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); $("#ggen").click(); } });
 $("#gchips").innerHTML=["party","cozy movie","ocean","fire","sunset"].map(w=>`<button class="ex" data-ex="${w}">${w}</button>`).join("");
 $("#gschadd").onclick=async()=>{ const v=$("#gschin").value.trim(); if(!v)return;

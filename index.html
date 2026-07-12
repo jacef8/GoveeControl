@@ -1089,10 +1089,12 @@ function wholeBody(d){
 // Speed is exposed as a 1-10 "level" (right = faster), not raw milliseconds —
 // converted to the engine's stepMs here so the slider reads naturally.
 const TWINKLE_SPEED_LABELS = {1:"Very slow",2:"Very slow",3:"Slow",4:"Slow",5:"Medium",6:"Medium",7:"Brisk",8:"Fast",9:"Fast",10:"Very fast"};
+const TWINKLE_SPEED_DEFAULT = 8;   // level 6 landed right at the server's rate-limit floor with no
+  // speedup yet applied (a real bug, fixed 2026-07-12) — 8 gives a visibly alive default out of the box
 function twinkleStepMs(lvl){ return Math.round(1500 - (lvl-1)*130); }
 function twinkleCardHTML(d){
   const color = d._twinkleColor ?? 0xffb454;   // warm amber — the classic "fairy light" glow
-  const lvl = d._twinkleSpeedLvl || 6;
+  const lvl = d._twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT;
   const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-twinkleswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
   const running = ActiveScene.get(d.device)?.pattern === "twinkle";
   return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">✨</span>Twinkle${running?'<span class="ld-val" style="color:#7cf5b8">Running</span>':''}</div>
@@ -1110,7 +1112,7 @@ async function startTwinkle(d){
   await stopSceneFor([d.device]);
   const color = d._twinkleColor ?? 0xffb454;
   const {r,g,b} = Govee.intToRgb(color);
-  const step = twinkleStepMs(d._twinkleSpeedLvl || 6);
+  const step = twinkleStepMs(d._twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT);
   try{
     const res=await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",
       headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},

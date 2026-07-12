@@ -1091,7 +1091,9 @@ function wholeBody(d){
 const TWINKLE_SPEED_LABELS = {1:"Very slow",2:"Very slow",3:"Slow",4:"Slow",5:"Medium",6:"Medium",7:"Brisk",8:"Fast",9:"Fast",10:"Very fast"};
 const TWINKLE_SPEED_DEFAULT = 8;   // level 6 landed right at the server's rate-limit floor with no
   // speedup yet applied (a real bug, fixed 2026-07-12) — 8 gives a visibly alive default out of the box
-function twinkleStepMs(lvl){ return Math.round(1500 - (lvl-1)*130); }
+// range widened 2026-07-12 (900ms→150ms) to match the server's floor coming
+// down from 1100ms to 150ms — the old 330ms-at-fastest never reached it
+function twinkleStepMs(lvl){ return Math.round(900 - (lvl-1)*83); }
 function twinkleCardHTML(d){
   const color = d._twinkleColor ?? 0xffb454;   // warm amber — the classic "fairy light" glow
   const lvl = d._twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT;

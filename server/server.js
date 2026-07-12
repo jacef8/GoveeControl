@@ -351,14 +351,19 @@ async function runTwinkle(id, count, cols, stepMs) {
   // collapsed to ~4 usable samples) and taking ~4x longer than intended to
   // complete a cycle. FIX: each zone now tracks its OWN phase counter,
   // advanced by exactly 1 only on ITS OWN turn — smooth sampling regardless
-  // of zone count. Speed: the ~1.1s/tick floor is a real, previously-confirmed
-  // Govee rate-limit floor, not adjustable — so a faster-than-floor request
-  // (stepMs below 1100) is expressed as a bigger phase jump per turn instead
-  // of a shorter tick (the ONLY way to speed up within that real constraint);
-  // a slower-than-floor request (stepMs above 1100) still lengthens the tick
-  // itself, which was already working correctly.
-  const tickMs = Math.max(1100, stepMs || 1100);
-  const phaseStep = (stepMs && stepMs < 1100) ? Math.min(4, Math.max(1, Math.round(1100 / stepMs))) : 1;
+  // of zone count.
+  // FLOOR LOWERED 2026-07-12 (jford: "needs to be much faster") — the
+  // original 1.1s floor was set from twinkle's OWN prior bug (multiple zone
+  // calls bursting within under a second, all inside one tick). But chase/
+  // strobe/bounce all send calls to the same device spaced 110-280ms apart
+  // and work fine, and twinkle now sends exactly ONE call per tick same as
+  // they do — so there's no real reason its floor should be 4-10x higher
+  // than theirs. Dropped to 150ms (between strobe's 110 and chase's 180).
+  // If this reintroduces "twinkle looks stuck," that's real evidence Govee
+  // treats fractional/blended segmentedColorRgb values differently from the
+  // other patterns' full-brightness on/off jumps — raise it back up if so.
+  const tickMs = Math.max(150, stepMs || 500);
+  const phaseStep = (stepMs && stepMs < 150) ? Math.min(4, Math.max(1, Math.round(150 / stepMs))) : 1;
   const zonePhase = Array.from({ length: zones }, (_, zi) => Math.round((zi * cycleSteps) / zones));   // staggered start
   // strict=true (only on the very first application) lets a genuine API error
   // propagate out to the caller instead of being silently swallowed — that's
@@ -395,12 +400,11 @@ async function runBreatheWhole(id, rgb, stepMs) {
   await setPower(id, true);          // first calls throw on real failure — see runTwinkle's comment
   await setColor(id, rgbInt(rgb));
   const floorB = 10, cycleSteps = 18;   // phase steps for ONE full breath (dim->bright->dim)
-  // same 1.1s/tick floor as runTwinkle (a real, confirmed Govee rate-limit
-  // floor) — a request faster than that is expressed as a bigger phase jump
-  // per tick instead of a shorter tick, so the speed control isn't silently
-  // a no-op below the floor (same fix applied to runTwinkle 2026-07-12).
-  const step = Math.max(1100, stepMs || 1100);
-  const phaseStep = (stepMs && stepMs < 1100) ? Math.min(4, Math.max(1, Math.round(1100 / stepMs))) : 1;
+  // same floor as runTwinkle, lowered 2026-07-12 for the same reason (see its
+  // comment) — a brightness-only call is at least as light as a segment
+  // color call, so there's no reason to hold it to a stricter floor.
+  const step = Math.max(150, stepMs || 500);
+  const phaseStep = (stepMs && stepMs < 150) ? Math.min(4, Math.max(1, Math.round(150 / stepMs))) : 1;
   let phase = 0, busy = false;
   const tick = async (strict) => {
     if (busy) return; busy = true;

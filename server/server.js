@@ -335,7 +335,15 @@ async function runTwinkle(id, count, cols, stepMs) {
   await setPower(id, true);   // let a real failure (offline device, bad id, etc.) throw here — the FIRST call must surface errors, not swallow them
   const zones = Math.min(4, Math.max(2, Math.round(count / 4)));   // fewer zones = fewer commands per tick
   const floor = 0.12;      // never fully dark — a glow, not an off
-  const cycleSteps = 16;   // phase steps for ONE full breath (dim->bright->dim)
+  // CUT 16→4 2026-07-12 (jford: "a twinkle should be just a second or two"):
+  // with round-robin (one zone serviced per tick) a full fade needs
+  // cycleSteps visits to ANY given zone, so total cycle time = cycleSteps ×
+  // zones × tickMs — at 16 steps even the 150ms floor couldn't get below
+  // ~9.6s for a 4-zone strip. 4 steps is the practical floor for still
+  // looking like a fade (dim→rising→bright→falling) rather than a hard
+  // blink — gets a 4-zone strip down to ~2.4s at top speed, a 2-zone strip
+  // to ~1.2s.
+  const cycleSteps = 4;
   let z = 0, busy = false;
   const zoneSegs = Array.from({ length: zones }, () => []);
   for (let i = 0; i < count; i++) zoneSegs[Math.floor((i * zones) / count)].push(i);
@@ -399,7 +407,11 @@ async function runBreatheWhole(id, rgb, stepMs) {
   stopBreathe(id);
   await setPower(id, true);          // first calls throw on real failure — see runTwinkle's comment
   await setColor(id, rgbInt(rgb));
-  const floorB = 10, cycleSteps = 18;   // phase steps for ONE full breath (dim->bright->dim)
+  // cut 18→8 2026-07-12 alongside runTwinkle's same change ("a twinkle should
+  // be just a second or two") — no round-robin here (every tick services the
+  // whole device directly), so cycle time is just cycleSteps × tickMs; 8
+  // steps at the 150ms floor lands at 1.2s.
+  const floorB = 10, cycleSteps = 8;
   // same floor as runTwinkle, lowered 2026-07-12 for the same reason (see its
   // comment) — a brightness-only call is at least as light as a segment
   // color call, so there's no reason to hold it to a stricter floor.

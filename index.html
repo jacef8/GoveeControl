@@ -1091,9 +1091,13 @@ function wholeBody(d){
 const TWINKLE_SPEED_LABELS = {1:"Very slow",2:"Very slow",3:"Slow",4:"Slow",5:"Medium",6:"Medium",7:"Brisk",8:"Fast",9:"Fast",10:"Very fast"};
 const TWINKLE_SPEED_DEFAULT = 8;   // level 6 landed right at the server's rate-limit floor with no
   // speedup yet applied (a real bug, fixed 2026-07-12) — 8 gives a visibly alive default out of the box
-// range widened 2026-07-12 (900ms→150ms) to match the server's floor coming
-// down from 1100ms to 150ms — the old 330ms-at-fastest never reached it
-function twinkleStepMs(lvl){ return Math.round(900 - (lvl-1)*83); }
+// range tightened 2026-07-12 (jford: "a twinkle should be just a second or
+// two") — combined with the server's cycleSteps cut (16→4), this keeps the
+// WHOLE slider range landing in the 1-6 second ballpark instead of 2-58s:
+// fastest (150ms) ≈ 1.2-2.4s per cycle depending on segment count, slowest
+// (400ms) ≈ 3.2-6.4s. No more "slow" option that stretches past a few
+// seconds — twinkle is a quick pulse now, not a slow synchronized breathe.
+function twinkleStepMs(lvl){ return Math.round(400 - (lvl-1)*28); }
 function twinkleCardHTML(d){
   const color = d._twinkleColor ?? 0xffb454;   // warm amber — the classic "fairy light" glow
   const lvl = d._twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT;

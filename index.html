@@ -200,8 +200,12 @@
   .tctrl input[type=range]{flex:1; min-width:120px; height:7px}
   .tswatch{display:flex; align-items:center; gap:9px; flex-wrap:wrap}
   .bicon{flex:0 0 auto; color:var(--ink-faint); font-size:15px; line-height:1}
-  .ticon{flex:0 0 auto; color:var(--ink-faint); font-size:17px; text-decoration:none; padding:3px 6px; border-radius:5px}
-  .ticon:hover{background:var(--surface-2); color:var(--ink)}
+  /* was bare faint text (jford: "the timer icon is hard to see") — now a real
+     small button matching the visual weight of every other icon control */
+  .ticon{flex:0 0 auto; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    color:var(--ink); font-size:15px; text-decoration:none; border-radius:9px;
+    border:1px solid var(--glass-border); background:var(--sheen), var(--glass-tint)}
+  .ticon:active{transform:scale(.92)}
   /* light chips inside a tile */
   .lites{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px}
   .lite{position:relative; cursor:pointer;

@@ -333,46 +333,44 @@ async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
 async function runTwinkle(id, count, cols, stepMs) {
   stopSegAnim(id);
   await setPower(id, true);   // let a real failure (offline device, bad id, etc.) throw here — the FIRST call must surface errors, not swallow them
-  const zones = Math.min(4, Math.max(2, Math.round(count / 4)));   // fewer zones = fewer commands per tick
   const floor = 0.12;      // never fully dark — a glow, not an off
-  // CUT 16→4 2026-07-12 (jford: "a twinkle should be just a second or two"):
-  // with round-robin (one zone serviced per tick) a full fade needs
-  // cycleSteps visits to ANY given zone, so total cycle time = cycleSteps ×
-  // zones × tickMs — at 16 steps even the 150ms floor couldn't get below
-  // ~9.6s for a 4-zone strip. 4 steps is the practical floor for still
-  // looking like a fade (dim→rising→bright→falling) rather than a hard
-  // blink — gets a 4-zone strip down to ~2.4s at top speed, a 2-zone strip
-  // to ~1.2s.
-  const cycleSteps = 4;
-  let z = 0, busy = false;
-  const zoneSegs = Array.from({ length: zones }, () => []);
-  for (let i = 0; i < count; i++) zoneSegs[Math.floor((i * zones) / count)].push(i);
-  // FIXED 2026-07-12 (was choppy/near-static regardless of speed setting — a
-  // careful re-audit found the actual bug): each tick only updates ONE zone,
-  // round-robin, to avoid Govee's cloud dropping rapid-fire calls to the same
-  // device (confirmed constraint — sending every zone's update within one
-  // tick, even sequentially, still looked "stuck"). The PREVIOUS version used
-  // a single shared `phase` counter that advanced every tick regardless of
-  // which zone was serviced — so a zone only visited once every `zones`
-  // ticks would find phase had already jumped by `zones` steps since its
-  // last turn, sampling the cosine curve far too coarsely (a 16-step fade
-  // collapsed to ~4 usable samples) and taking ~4x longer than intended to
-  // complete a cycle. FIX: each zone now tracks its OWN phase counter,
-  // advanced by exactly 1 only on ITS OWN turn — smooth sampling regardless
-  // of zone count.
-  // FLOOR LOWERED 2026-07-12 (jford: "needs to be much faster") — the
-  // original 1.1s floor was set from twinkle's OWN prior bug (multiple zone
-  // calls bursting within under a second, all inside one tick). But chase/
-  // strobe/bounce all send calls to the same device spaced 110-280ms apart
-  // and work fine, and twinkle now sends exactly ONE call per tick same as
-  // they do — so there's no real reason its floor should be 4-10x higher
-  // than theirs. Dropped to 150ms (between strobe's 110 and chase's 180).
-  // If this reintroduces "twinkle looks stuck," that's real evidence Govee
-  // treats fractional/blended segmentedColorRgb values differently from the
-  // other patterns' full-brightness on/off jumps — raise it back up if so.
-  const tickMs = Math.max(150, stepMs || 500);
-  const phaseStep = (stepMs && stepMs < 150) ? Math.min(4, Math.max(1, Math.round(150 / stepMs))) : 1;
-  const zonePhase = Array.from({ length: zones }, (_, zi) => Math.round((zi * cycleSteps) / zones));   // staggered start
+  const cycleSteps = 4;    // phase steps per fade — see 2026-07-12 note below on why this is low
+  // RANDOMIZED 2026-07-20 (jford: "it's not random — it's doing big sections
+  // at a time, four or five lights moving together, instead of completely
+  // random up and down the strand, like drops of rain"): the previous design
+  // split the strip into 2-4 large CONTIGUOUS zones (segments 0-3, 4-7, ...)
+  // — every segment in a zone shared the exact same brightness at the exact
+  // same moment, which reads as a few big blocks pulsing in unison, not
+  // scattered independent twinkling. Two changes fix this:
+  // (1) segments are assigned to "points" by INTERLEAVING (i % points), not
+  //     contiguous chunking — so any one point's segments are scattered
+  //     across the WHOLE strip, not clustered in one region.
+  // (2) more, smaller points (up to 8, vs the old 2-4), each with its OWN
+  //     randomized starting phase (not evenly spaced) — and instead of a
+  //     predictable round-robin visiting order, each tick updates a couple
+  //     of RANDOMLY chosen points, so the sequence itself feels organic.
+  //     Sending 3 calls/tick (not 1) is still rate-limit-safe — bounce already
+  //     proves multiple calls/tick to one device works fine at a similar floor.
+  const rawPoints = Math.min(8, Math.max(4, Math.round(count / 2)));
+  const allSegs = Array.from({ length: rawPoints }, () => []);
+  for (let i = 0; i < count; i++) allSegs[i % rawPoints].push(i);
+  const pointSegs = allSegs.filter((s) => s.length);   // drop any point that ended up with zero segments (small strips)
+  const points = pointSegs.length;
+  const pointPhase = pointSegs.map(() => Math.floor(Math.random() * cycleSteps));   // randomized start, not evenly staggered
+  const UPDATES_PER_TICK = Math.min(3, points);   // 3/tick keeps cycle time close to the earlier "a second or two" target even with more, scattered points — bounce already proves 3+ calls/tick is safe at this floor
+  let busy = false;
+  // floor/speed reasoning from 2026-07-12 ("much faster" + "a second or two"
+  // fixes) still applies — bumped slightly (150→220ms) since this now sends
+  // up to 3 calls/tick instead of 1, matching bounce's proven-safe floor for
+  // multi-call ticks.
+  const tickMs = Math.max(220, stepMs || 500);
+  const phaseStep = (stepMs && stepMs < 220) ? Math.min(4, Math.max(1, Math.round(220 / stepMs))) : 1;
+  const colorFor = (p) => {
+    const t = pointPhase[p] / cycleSteps;
+    const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
+    const base = cols[p % cols.length];
+    return rgbInt(base.map((c) => Math.round(c * factor)));
+  };
   // strict=true (only on the very first application) lets a genuine API error
   // propagate out to the caller instead of being silently swallowed — that's
   // what made past failures look like "nothing happened" with no diagnostic.
@@ -381,17 +379,14 @@ async function runTwinkle(id, count, cols, stepMs) {
   const tick = async (strict) => {
     if (busy) return; busy = true;
     try {
-      const segs = zoneSegs[z];
-      if (segs.length) {
-        zonePhase[z] = (zonePhase[z] + phaseStep) % cycleSteps;
-        const t = zonePhase[z] / cycleSteps;
-        const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
-        const base = cols[z % cols.length];
-        const rgb = rgbInt(base.map((c) => Math.round(c * factor)));
-        const call = segControl(id, segs, rgb);
-        await (strict ? call : call.catch(() => {}));
-      }
-      z = (z + 1) % zones;
+      const picked = new Set();
+      while (picked.size < Math.min(UPDATES_PER_TICK, points)) picked.add(Math.floor(Math.random() * points));
+      const calls = [...picked].map((p) => {
+        pointPhase[p] = (pointPhase[p] + phaseStep) % cycleSteps;
+        const call = segControl(id, pointSegs[p], colorFor(p));
+        return strict ? call : call.catch(() => {});
+      });
+      await (strict ? Promise.all(calls) : Promise.allSettled(calls));
     } finally { busy = false; }
   };
   await tick(true);

@@ -97,6 +97,8 @@
   .arow{display:flex; align-items:center; gap:11px; border-bottom:1px solid var(--glass-border-soft);
     padding:13px 2px; margin-bottom:0}
   .arow:last-child{border-bottom:0}
+  .aicon{flex:0 0 auto; width:34px; height:34px; border-radius:11px; display:flex; align-items:center; justify-content:center;
+    font-size:16px; background:var(--sheen), var(--glass-tint); border:1px solid var(--glass-border-soft)}
   .sw{width:54px;height:32px;border-radius:16px;border:1px solid var(--glass-border);background:var(--sheen), var(--glass-tint);
     backdrop-filter:blur(var(--blur)); -webkit-backdrop-filter:blur(var(--blur));
     position:relative;cursor:pointer;flex:0 0 auto;transition:.25s; box-shadow:inset 0 1px 3px rgba(0,0,0,.25)}
@@ -950,12 +952,22 @@ async function loadSGroups(){
   const sel=$("#gschgrp");
   if(sel) sel.innerHTML='<option value="">All lights</option>'+SGROUPS.map(g=>`<option value="${g.id}">${g.name}</option>`).join("");
 }
+// jford: "looking at the list of timers I cannot tell what is going to
+// happen" — root cause was the row leading with the (usually generic,
+// often just "Automation") LABEL as the big bold headline, with the actual
+// action buried in small dim text. actionSummary/actionIcon now describe
+// the real outcome in plain language, and the row below puts THIS first.
 function actionSummary(action){
-  if(!action) return "?";
-  if(action.kind==="allOff") return "Off";
-  if(action.kind==="allOn") return action.brightness!=null ? `On · ${action.brightness}%` : "On";
-  if(action.kind==="scene" && action.scene) return `🎬 ${action.scene.name||"Scene"}`;
-  return "?";
+  if(!action || action.kind==="allOff") return "Turn off";
+  if(action.kind==="allOn") return action.brightness!=null ? `Turn on · ${action.brightness}%` : "Turn on";
+  if(action.kind==="scene" && action.scene) return `Run "${action.scene.name||"scene"}"`;
+  return "Run a custom action";
+}
+function actionIcon(action){
+  if(!action || action.kind==="allOff") return "🌙";
+  if(action.kind==="allOn") return "💡";
+  if(action.kind==="scene") return "🎬";
+  return "⚡";
 }
 async function renderAuto(){
   AUTO = await autoList();
@@ -964,9 +976,11 @@ async function renderAuto(){
   el.innerHTML = AUTO.map(s=>{
     const en = s.enabled!==false && s.on!==false;
     const tgt = s.action?.groupId ? (SGROUPS.find(g=>g.id===s.action.groupId)?.name || "group") : "all lights";
+    const nickname = (s.label && s.label!==actionSummary(s.action)) ? `<div style="font-size:11px;color:var(--ink-faint);margin-top:1px">"${s.label}"</div>` : "";
     return `<div class="arow">
-      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">${s.label||"Automation"}</div>
-        <div style="font-size:12px;color:var(--dim);margin-top:2px">${s.when||s.cron||""} · ${tgt} · ${actionSummary(s.action)}</div></div>
+      <div class="aicon">${actionIcon(s.action)}</div>
+      <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:15px">${actionSummary(s.action)}</div>
+        <div style="font-size:12.5px;color:var(--dim);margin-top:2px">${s.when||s.cron||"—"} · ${tgt}</div>${nickname}</div>
       <div class="sw ${en?'on':''}" data-tog="${s.id}"><span class="k"></span></div>
       <button class="ex" data-auedit="${s.id}" style="margin-left:8px">✏️</button>
       <button class="ex" data-audel="${s.id}" style="border-color:#6e2f2f;color:#ff8a8a;margin-left:6px">✕</button></div>`;

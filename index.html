@@ -269,7 +269,8 @@
   .ldm-tabs{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:14px 0 16px}
   .ldm-tab{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
     padding:12px 4px; border-radius:14px; border:1px solid var(--glass-border-soft); cursor:pointer;
-    background:var(--surface-2); color:var(--ink-2); font:650 12px 'Inter',system-ui; transition:transform .12s}
+    background:var(--surface-2); color:var(--ink-2); font:650 12px 'Inter',system-ui; transition:transform .12s;
+    text-decoration:none}
   .ldm-tab .ico2{font-size:19px; line-height:1}
   .ldm-tab:active{transform:scale(.95)}
   .ldm-tab.active{background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2)); color:#052730;
@@ -925,12 +926,6 @@ function groupColorPaneHTML(name, list, online){
       <div class="ld-whites">${whites}</div>
     </div>`;
 }
-function groupScenePaneHTML(name, gid){
-  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎬</span>Scenes</div>
-    <div class="ld-dim" style="margin-bottom:12px">Built-in scenes belong to each physical light — open an individual light in this group to browse its own built-in scenes. For moving/animated scenes that work across a whole group, use the Scenes library.</div>
-    <a class="ld-act" style="display:flex; width:100%; box-sizing:border-box" href="scenes.html${gid?('#scenetgt=grp:'+gid):''}">Browse the Scenes library for ${name} →</a>
-  </div>`;
-}
 function groupEffectsPaneHTML(name, list, st){
   const color = st.twinkleColor ?? 0xffb454;
   const lvl = st.twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT;
@@ -991,15 +986,20 @@ function renderGroupDetail(){
     </div>` : "";
   const tab=st.tab;
   const pane=(pname,html)=>`<div class="ldm-pane" data-ldpane="${pname}" style="display:${tab===pname?'':'none'}">${html}</div>`;
+  // Scene is a direct LINK, not an in-modal tab — jford: "when I click Scenes
+  // on a light group, it shouldn't go this screen [an explanation card with
+  // one link] — that's just an extra click that serves no purpose." Built-in
+  // scenes genuinely can't be shown for a mixed group (they're per-physical-
+  // light data), so the pane never had anything useful except this same link
+  // anyway — go straight to the Scenes library, pre-targeted to this group.
   const tabBar=`<div class="ldm-tabs">
     <div class="ldm-tab ${tab==='color'?'active':''}" data-ldtab="color"><span class="ico2">🎨</span>Color</div>
-    <div class="ldm-tab ${tab==='scene'?'active':''}" data-ldtab="scene"><span class="ico2">🎬</span>Scene</div>
+    <a class="ldm-tab" href="scenes.html${gid?('#scenetgt=grp:'+gid):''}"><span class="ico2">🎬</span>Scene</a>
     <div class="ldm-tab ${tab==='effects'?'active':''}" data-ldtab="effects"><span class="ico2">✨</span>Effects</div>
     <div class="ldm-tab ${tab==='music'?'active':''}" data-ldtab="music"><span class="ico2">🎵</span>Music</div>
   </div>`;
   card.innerHTML = head + runningBanner + tabBar
     + pane("color", groupColorPaneHTML(name,list,online))
-    + pane("scene", groupScenePaneHTML(name,gid))
     + pane("effects", groupEffectsPaneHTML(name,list,st))
     + pane("music", groupMusicPaneHTML(name,gid));
   const q=s=>card.querySelector(s);

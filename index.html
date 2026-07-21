@@ -464,7 +464,7 @@ const Govee = (() => {
       headers: { "Content-Type":"application/json", "X-Passcode": CONFIG.PASSCODE },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if(!res.ok) throw new Error("proxy "+res.status);
+    if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error || ("proxy "+res.status)); }
     return res.json();
   }
   async function liveList(){ return (await call("/govee/devices")).data; }
@@ -1118,10 +1118,16 @@ function sceneChipsHTML(d){
   }).join("");
 }
 function attachSceneChips(card,d){
-  card.querySelectorAll("[data-ldscene]").forEach(b=>b.onclick=()=>{ if(!d.online) return toast("Light is offline",true);
+  card.querySelectorAll("[data-ldscene]").forEach(b=>b.onclick=async()=>{ if(!d.online) return toast("Light is offline",true);
     const s=(d._scenes||[])[+b.dataset.ldscene]; if(!s) return;
     card.querySelectorAll(".scenechip.active").forEach(x=>x.classList.remove("active")); b.classList.add("active"); flashEl(b);
-    Govee.applyBuiltin(d.device,s.value,s.instance).catch(()=>{}); toast("Scene: "+s.name); });
+    // FIXED 2026-07-21 (jford: "it keeps telling me it can't apply those
+    // scenes") — this used to swallow any failure (`.catch(()=>{})`) and
+    // always show "Scene: X" regardless of whether Govee actually accepted
+    // it, so a genuine rejection looked identical to success.
+    try{ await Govee.applyBuiltin(d.device,s.value,s.instance); toast("Scene: "+s.name); }
+    catch(e){ toast("Couldn't apply \""+s.name+"\": "+e.message, true); }
+  });
 }
 // does this device expose addressable segments? (RGBIC strips) + how many
 function segInfo(d){

@@ -134,8 +134,6 @@
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px;height:22px;border-radius:50%; background:#fff; border:none; box-shadow:0 1px 5px rgba(0,0,0,.3), 0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
   input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#fff;border:none}
   input[type=range].fillbar{background:linear-gradient(90deg,var(--accent) var(--p,100%),var(--line-strong) var(--p,100%))}
-  #gmic.listening{color:#fff !important; background:var(--off) !important; border-color:var(--off) !important; animation:micpulse 1s ease-in-out infinite}
-  @keyframes micpulse{0%,100%{opacity:1}50%{opacity:.55}}
   /* top-level tabs */
   .subtabs{flex:0 0 auto; display:flex; gap:5px;
     background:var(--sheen), color-mix(in srgb,var(--surface) 72%, transparent);
@@ -202,8 +200,7 @@
       <textarea id="gp" rows="2" placeholder="multicolored moving party scene"></textarea>
       <div class="row" style="margin-top:9px">
         <button id="ggen" class="btn blue">✨ Generate scene</button>
-        <button id="gmic" class="btn" title="Speak your scene">🎤 Speak</button>
-        <span style="font-size:12px;color:var(--ink-faint)">or press Enter</span>
+        <span style="font-size:12px;color:var(--ink-faint)">or press Enter — tap the keyboard's mic icon to dictate</span>
       </div>
       <div id="gstatus"></div>
       <div id="gchips" class="row" style="margin-top:9px"></div>
@@ -479,9 +476,13 @@ async function executeApply(scene, kind, ids){
   const names = ids.map(id=>(DEVICES.find(d=>d.device===id)||{}).deviceName).filter(Boolean);
   const label = ids.length===DEVICES.length && DEVICES.length>0 ? "all lights" : (ids.length===1 ? (names[0]||"1 light") : `${ids.length} lights`);
   if(kind==="device"){
-    await activateBuiltin(scene, ids);
-    markScene(ids, scene.name, "builtin");
-    toast(`Applied "${scene.name}" to ${label}`); msg(`Applied built-in "${scene.name}" to ${label}`);
+    try{
+      await activateBuiltin(scene, ids);
+      markScene(ids, scene.name, "builtin");
+      toast(`Applied "${scene.name}" to ${label}`); msg(`Applied built-in "${scene.name}" to ${label}`);
+    }catch(e){
+      toast(`Couldn't apply "${scene.name}": ${e.message}`, true); msg(`Couldn't apply "${scene.name}": ${e.message}`);
+    }
     return;
   }
   if(scene.pattern==="twinkle"){   // twinkle handles segment-capable (per-segment breathe) AND whole-device (single breathe) server-side — one call covers everyone
@@ -628,7 +629,20 @@ function renderSaved(){
   el.innerHTML = others.length ? savedGridHTML(others, false)
     : '<div style="color:var(--dim);font-size:13px;padding:4px 2px">No saved scenes yet. Pick a library scene, then tap <b>Save</b> — it stays here (and in the timer &amp; trigger pickers).</div>';
 }
-function addSaved(s){ SAVED=SAVED.filter(x=>x.name!==s.name); SAVED.unshift(s); if(SAVED.length>12) SAVED.pop(); saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs(); }
+function addSaved(s){
+  SAVED=SAVED.filter(x=>x.name!==s.name); SAVED.unshift(s);
+  // cap PER ORIGIN (AI-generated vs library-saved), not one shared cap — now
+  // that every AI generation auto-saves, a single shared 12-item cap would
+  // let a burst of AI experimentation quietly evict manually-saved library
+  // scenes (and vice versa).
+  const CAP=16, counts={ai:0, other:0};
+  SAVED = SAVED.filter(item=>{
+    const key = item.origin==="ai" ? "ai" : "other";
+    if(counts[key] >= CAP) return false;
+    counts[key]++; return true;
+  });
+  saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs();
+}
 function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typeof renderTrigActs==="function") renderTrigActs(); }
 renderSaved();
 
@@ -871,9 +885,21 @@ async function getBuiltinScenes(){
 async function activateBuiltin(s, ids){
   if(CONFIG.USE_MOCK) return true;
   const targets = ids && ids.length ? ids : (DEVICES.length ? DEVICES.map(d=>d.device) : []);
-  await Promise.all(targets.map(device=> fetch(CONFIG.PROXY_BASE+"/govee/scene/builtin",{method:"POST",
-    headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
-    body:JSON.stringify({device, value:s.value, instance:s.instance})})));
+  // FIXED 2026-07-21 (jford: "it keeps telling me it can't apply those
+  // scenes" — built-in scenes were the one apply path never given the real
+  // error-surfacing treatment the rest of the app got earlier: this used to
+  // fire the request and never check whether it actually succeeded, so a
+  // genuine Govee rejection (bad scene value, offline device, unsupported
+  // capability) looked identical to success). Now checks each response and
+  // throws a real, specific error if any device failed.
+  const results = await Promise.allSettled(targets.map(async device=>{
+    const r = await fetch(CONFIG.PROXY_BASE+"/govee/scene/builtin",{method:"POST",
+      headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
+      body:JSON.stringify({device, value:s.value, instance:s.instance})});
+    if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error || `HTTP ${r.status}`); }
+  }));
+  const failed = results.find(r=>r.status==="rejected");
+  if(failed) throw new Error(failed.reason?.message || "scene rejected");
   return true;
 }
 // does this device expose addressable segments? (RGBIC strips)
@@ -1173,8 +1199,17 @@ $("#ggen").onclick=async(ev)=>{ const p=$("#gp").value||"multicolored moving par
   toast("Generating scene…"); msg("Generating scene…");
   try{
     const s=await designScene(p); s.origin="ai"; renderPreview(s);
-    st.className="ok"; st.textContent=`✓ Generated "${s.name}" — see the preview below`;
-    msg(`Generated "${s.name}" — Claude returns a frame-by-frame scene like this`);
+    // AUTO-SAVE 2026-07-21 (jford: "I made a couple AI scenes and after I
+    // made a new one I couldn't find the previous ones" — root cause: a
+    // generated scene only ever lived in this ONE preview slot, which the
+    // NEXT generation overwrites; persisting it required a separate manual
+    // "Save" tap in the preview card that's easy to miss). Every generated
+    // scene now lands directly in "Your AI scenes" the moment it's made —
+    // no extra step required. The Save button in the preview still works
+    // (harmless re-save) for anyone who taps it anyway.
+    addSaved(s);
+    st.className="ok"; st.textContent=`✓ Generated "${s.name}" — saved to Your AI scenes`;
+    msg(`Generated "${s.name}" — saved to Your AI scenes`);
     $("#gpreview")?.scrollIntoView({behavior:"smooth", block:"nearest"});
     applyOrPick(s,"library");
   }catch(e){
@@ -1271,23 +1306,11 @@ $("#gtarget").onchange=()=>{ sceneTarget=$("#gtarget").value;
   const opt=$("#gtarget").selectedOptions[0]; msg("Scenes apply to: "+(opt?opt.textContent:"All lights")); };
 $("#gbright").oninput=()=>{ const v=+$("#gbright").value; $("#gbrightval").textContent=v+"%"; $("#gbright").style.setProperty("--p",v+"%");
   clearTimeout(window._gbt); window._gbt=setTimeout(()=>setBrightFor(v),260); };
-/* ---------- voice typing for the scene prompt (Web Speech API) ---------- */
-(function(){
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const mic = $("#gmic"); if(!mic) return;
-  if(!SR){ mic.style.display="none"; return; }   // browser doesn't support it
-  let rec=null, listening=false;
-  mic.onclick=()=>{
-    if(listening){ try{ rec.stop(); }catch{} return; }
-    rec=new SR(); rec.lang="en-US"; rec.interimResults=true; rec.continuous=false;
-    const base = $("#gp").value ? $("#gp").value.trim()+" " : "";
-    rec.onstart=()=>{ listening=true; mic.classList.add("listening"); mic.textContent="● Listening"; toast("Listening… speak your scene"); };
-    rec.onresult=(e)=>{ let t=""; for(let i=e.resultIndex;i<e.results.length;i++) t+=e.results[i][0].transcript; $("#gp").value=base+t; };
-    rec.onerror=(e)=>{ toast("Mic: "+(e.error==="not-allowed"?"allow microphone access":e.error||"error"), true); };
-    rec.onend=()=>{ listening=false; mic.classList.remove("listening"); mic.textContent="🎤 Speak"; };
-    try{ rec.start(); }catch{ toast("Couldn't start the mic", true); }
-  };
-})();
+// Custom Web Speech API mic button REMOVED 2026-07-21 (jford: "the speak
+// function doesn't need its own button, that function will come from the
+// keyboard voice input" — every phone/OS keyboard already has its own mic
+// dictation button built into the text field, making a second, custom one
+// here redundant and confusing).
 (async()=>{
   await loadDevices(); renderBuiltin(); renderTargets();
   if(!CONFIG.USE_MOCK){ TRIGGERS = await trigGet(); renderTriggers(); }

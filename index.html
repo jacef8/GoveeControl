@@ -928,7 +928,7 @@ function groupColorPaneHTML(name, list, online){
 function groupScenePaneHTML(name, gid){
   return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎬</span>Scenes</div>
     <div class="ld-dim" style="margin-bottom:12px">Built-in scenes belong to each physical light — open an individual light in this group to browse its own built-in scenes. For moving/animated scenes that work across a whole group, use the Scenes library.</div>
-    <a class="ld-act" style="display:flex" href="scenes.html${gid?('#scenetgt=grp:'+gid):''}">Browse the Scenes library for ${name} →</a>
+    <a class="ld-act" style="display:flex; width:100%; box-sizing:border-box" href="scenes.html${gid?('#scenetgt=grp:'+gid):''}">Browse the Scenes library for ${name} →</a>
   </div>`;
 }
 function groupEffectsPaneHTML(name, list, st){
@@ -1253,10 +1253,10 @@ function renderLightDetail(){
     img.onload=()=>{
       d._photoPalette=extractPalette(img,5);
       URL.revokeObjectURL(url);
-      const box=q("[data-photopal]");
+      const box=q("[data-photopal]"), actionsBox=q("[data-photoactions]");
       if(box) box.innerHTML = d._photoPalette.map(([r,g,b])=>
-        `<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("")
-        + `<button class="ld-act" data-ldphotoapply style="flex:0 0 auto;padding:9px 14px">Cycle these</button>`;
+        `<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("");
+      if(actionsBox) actionsBox.innerHTML = `<div class="ld-actions" style="margin-top:10px"><button class="ld-act" data-ldphotoapply>Cycle these</button></div>`;
       card.querySelectorAll("[data-ldcol]").forEach(b=>b.onclick=()=>{ stopSceneFor([d.device]); const v=+b.dataset.ldcol; d._state.color=v; d._state.colorTemp=0; touch(d); setColorEverywhere(d,v).catch(()=>{}); toast("Color set"); render(); renderLightDetail(); });
       const applyBtn=q("[data-ldphotoapply]"); if(applyBtn) applyBtn.onclick=()=>applyPhotoScene(d);
       toast("Palette extracted — tap a swatch, or Cycle these");
@@ -1325,8 +1325,12 @@ async function startTwinkle(d){
 function effectsPaneHTML(d,seg){
   const segCard = seg.supported ? `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🧩</span>Sections of this strip</div>${subBody(d,seg)}</div>` : "";
   const pal = d._photoPalette;
-  const palRow = pal ? pal.map(([r,g,b])=>`<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("")
-      + `<button class="ld-act" data-ldphotoapply style="flex:0 0 auto;padding:9px 14px">Cycle these</button>` : "";
+  const palRow = pal ? pal.map(([r,g,b])=>`<button class="ld-sw" data-ldcol="${Govee.rgbToInt(r,g,b)}" style="background:rgb(${r},${g},${b})" title="Tap to set this color"></button>`).join("") : "";
+  // "Cycle these" gets its OWN full-width row, not trailing after the round
+  // color swatches (jford: "no single button on a line... really make the
+  // app clean and modern" — a lone button squeezed in after small circular
+  // swatches read as an afterthought, not a deliberate action).
+  const cycleRow = pal ? `<div class="ld-actions" style="margin-top:10px"><button class="ld-act" data-ldphotoapply>Cycle these</button></div>` : "";
   return twinkleCardHTML(d)
     + `<div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
       <div class="ld-actions">
@@ -1338,6 +1342,7 @@ function effectsPaneHTML(d,seg){
       <div class="ld-dim" style="margin-bottom:10px">Pick a photo — we'll pull its dominant colors and turn them into a scene for this light.</div>
       <input type="file" accept="image/*" data-ldphoto style="display:block;margin-bottom:10px;width:100%;color:var(--ink-2);font-size:13px">
       <div class="ld-sws" data-photopal>${palRow}</div>
+      <div data-photoactions>${cycleRow}</div>
     </div>`;
 }
 function musicPaneHTML(d){

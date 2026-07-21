@@ -589,7 +589,7 @@ function renderPreview(s){
     </div>
     <div style="font-size:12px;color:var(--dim);margin-top:9px">${s.via}${s.motion?` · ${(s.step/1000).toFixed(1)}s/step`:""}</div>
     <div class="row" style="margin-top:11px">
-      <button id="gsave" class="btn">Save</button>
+      <button id="gsave" class="btn" style="flex:1">Save</button>
     </div></div>`;
   startPvAnim(s);
   $("#pvmotion").onclick=()=>{ s.motion=!s.motion; if(!s.motion){ s.step=0; } else if(!s.step){ s.step=1500; } renderPreview(s); };

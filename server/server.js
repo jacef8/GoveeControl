@@ -141,7 +141,11 @@ const setBright = (id, v)   => control(id, "devices.capabilities.range",        
 const setColor  = (id, rgb) => control(id, "devices.capabilities.color_setting", "colorRgb",    rgb);
 
 app.get("/govee/devices", gate, async (_req, res) => {
-  try { res.json({ data: await listDevices() }); }
+  // internal capability-resolution (resolveSku etc.) still sees the FULL raw
+  // list via listDevices()/deviceMap — only what the CLIENT displays is
+  // filtered, so a hidden device is invisible in the app but a stray
+  // leftover group/automation referencing its id doesn't start throwing.
+  try { const devices = await listDevices(); res.json({ data: devices.filter((d) => !hiddenDevices.includes(d.device)) }); }
   catch (e) { res.status(502).json({ error: e.message }); }
 });
 app.post("/govee/state", gate, async (req, res) => {
@@ -715,6 +719,35 @@ function loadGroups() {
 }
 function saveGroups() { try { writeFileSync(GROUP_PATH, JSON.stringify(groups, null, 2)); } catch (e) { console.error("saveGroups:", e.message); } }
 
+/* ============================================================
+   HIDDEN DEVICES  (jford: "how do I delete these ungrouped lights that
+   show up in our app but not in the Govee manufacturer app?" — the Cloud
+   API returns a raw flat device list that can include entries Govee Home
+   hides/merges on its end; we have no way to actually delete a device from
+   the account, so instead: let the user hide it from OUR app specifically.
+   Persisted under DATA_DIR like groups/automations so it's consistent
+   across every device, not just one browser's localStorage.)
+   ============================================================ */
+const HIDDEN_PATH = join(DATA_DIR, "hidden.json");
+let hiddenDevices = [];
+function loadHidden() {
+  try { hiddenDevices = existsSync(HIDDEN_PATH) ? JSON.parse(readFileSync(HIDDEN_PATH, "utf8")) : []; }
+  catch { hiddenDevices = []; }
+}
+function saveHidden() { try { writeFileSync(HIDDEN_PATH, JSON.stringify(hiddenDevices, null, 2)); } catch (e) { console.error("saveHidden:", e.message); } }
+
+app.get("/hidden", gate, (_req, res) => res.json({ data: hiddenDevices }));
+app.post("/hidden", gate, (req, res) => {
+  const id = req.body.device;
+  if (!id) return res.status(400).json({ error: "device id required" });
+  if (!hiddenDevices.includes(id)) { hiddenDevices.push(id); saveHidden(); }
+  res.json({ data: hiddenDevices });
+});
+app.delete("/hidden/:id", gate, (req, res) => {
+  hiddenDevices = hiddenDevices.filter((x) => x !== req.params.id); saveHidden();
+  res.json({ data: hiddenDevices });
+});
+
 app.get("/groups", gate, (_req, res) => res.json({ data: groups }));
 app.post("/groups", gate, (req, res) => {
   const g = { id: randomUUID(), name: req.body.name || "Group", devices: req.body.devices || [] };
@@ -805,5 +838,6 @@ app.delete("/triggers/:id", gate, (req, res) => {
 loadStore();
 loadTriggers();
 loadGroups();
+loadHidden();
 listDevices().then(rescheduleAll).catch(() => rescheduleAll());
 app.listen(PORT, () => console.log(`Govee proxy on :${PORT}`));

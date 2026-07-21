@@ -33,6 +33,10 @@
   html,body{margin:0; min-height:var(--avh); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; line-height:1.5;
     background:var(--bg); background-attachment:fixed}
+  /* dropdown OPTION list had no styling, falling back to a plain white
+     browser-native popup against the app's dark-styled closed select —
+     see the matching note in scenes.html for the Safari/iOS caveat. */
+  select option{background:var(--surface-2); color:var(--ink)}
   body{display:flex; flex-direction:column}
   /* ---------- top bar ----------
      The header (brand + the 8-button grid) used to be position:sticky with

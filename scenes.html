@@ -33,6 +33,14 @@
   html,body{margin:0; height:var(--avh); color:var(--ink); overflow:hidden;
     font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; font-size:16px; line-height:1.5;
     background:var(--bg); background-attachment:fixed}
+  /* the closed <select> box was already styled dark, but its dropdown OPTION
+     list had no styling at all, so it fell back to a plain white browser-
+     native popup (jford: "this dropdown is messed up") — Chrome and most
+     Chromium-based browsers DO respect background/color on <option> even
+     though the popup itself is otherwise OS-rendered. (Safari/iOS ignores
+     this and always shows its own native picker regardless — a real
+     platform limit, not something CSS can fully override there.) */
+  select option{background:var(--surface-2); color:var(--ink)}
   body{display:flex; flex-direction:column}
   header{position:sticky; top:0; z-index:20; flex:0 0 auto; padding:calc(11px + env(safe-area-inset-top)) 16px 16px;
     display:flex; align-items:center; gap:10px; border-bottom-left-radius:22px; border-bottom-right-radius:22px;

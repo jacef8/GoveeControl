@@ -232,7 +232,28 @@ app.post("/govee/stop", gate, (req, res) => {
    segment count, to stay rate-limit friendly.
    ============================================================ */
 let segAnimTimers = {};   // deviceId -> interval handle, independent per device
-function stopSegAnim(id) { if (segAnimTimers[id]) { clearInterval(segAnimTimers[id]); delete segAnimTimers[id]; } }
+// SAFETY AUTO-STOP 2026-07-21 (jford: "what happens if I have a scene
+// selected in both the Govee app and our app?" + reports of commands not
+// taking / sections of the strip stuck) — these animations previously ran
+// FOREVER once started, with zero awareness of anything happening outside
+// this app. If you start Twinkle and never explicitly hit Stop (close the
+// tab, switch to the Govee app, whatever), the server keeps sending updates
+// indefinitely and will keep overriding ANY other change to that device —
+// Govee Home, another session, anything — since it has no way to know you
+// touched the light elsewhere. That's very likely why things looked "stuck."
+// Every segment animation now auto-stops after 30 minutes as a safety net,
+// so a forgotten scene can't fight you forever.
+const MAX_ANIM_MS = 30 * 60 * 1000;
+let segAutoStop = {};   // deviceId -> the auto-stop timeout, cleared alongside the interval
+function armSegTimer(id, handle) {
+  segAnimTimers[id] = handle;
+  clearTimeout(segAutoStop[id]);
+  segAutoStop[id] = setTimeout(() => stopSegAnim(id), MAX_ANIM_MS);
+}
+function stopSegAnim(id) {
+  if (segAnimTimers[id]) { clearInterval(segAnimTimers[id]); delete segAnimTimers[id]; }
+  if (segAutoStop[id]) { clearTimeout(segAutoStop[id]); delete segAutoStop[id]; }
+}
 function deviceSegCount(id) {
   const d = deviceMap[id]; if (!d) return 0;
   const cap = (d.capabilities || []).find((c) => c.type === "devices.capabilities.segment_color_setting");
@@ -264,7 +285,7 @@ async function runChase(id, count, cols, bandWidth, stepMs) {
     if (pos >= count - 1) { dir = -1; colorIdx++; } else if (pos <= 0) { dir = 1; colorIdx++; }
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(180, stepMs || 300));
+  armSegTimer(id, setInterval(() => tick().catch(() => {}), Math.max(180, stepMs || 300)));
 }
 async function runWave(id, count, cols, stepMs) {
   stopSegAnim(id); await setPower(id, true).catch(() => {});
@@ -277,7 +298,7 @@ async function runWave(id, count, cols, stepMs) {
     phase = (phase + 1) % rgbs.length;
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(280, stepMs || 550));
+  armSegTimer(id, setInterval(() => tick().catch(() => {}), Math.max(280, stepMs || 550)));
 }
 // STROBE: the whole strip hard-flashes between palette colors with a dark beat
 // in between (color -> off -> next color -> off...) — a real concert-style flash,
@@ -293,7 +314,7 @@ async function runStrobe(id, count, cols, stepMs) {
     beat++;
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(110, stepMs || 150));
+  armSegTimer(id, setInterval(() => tick().catch(() => {}), Math.max(110, stepMs || 150)));
 }
 // BOUNCE: several comet bands (bandCount) run at once, evenly spaced, each its
 // own color, all ping-ponging together — a much busier, livelier chase.
@@ -327,7 +348,7 @@ async function runBounce(id, count, cols, bandWidth, bandCount, stepMs) {
     if (pos >= count - 1) { dir = -1; roundIdx++; } else if (pos <= 0) { dir = 1; roundIdx++; }
   };
   await tick();
-  segAnimTimers[id] = setInterval(() => tick().catch(() => {}), Math.max(220, stepMs || 280));
+  armSegTimer(id, setInterval(() => tick().catch(() => {}), Math.max(220, stepMs || 280)));
 }
 // TWINKLE: a genuine slow brightness FADE (not a hard on/off cut) — the strip
 // is split into a handful of zones, each holding a fixed color from the
@@ -338,37 +359,28 @@ async function runTwinkle(id, count, cols, stepMs) {
   stopSegAnim(id);
   await setPower(id, true);   // let a real failure (offline device, bad id, etc.) throw here — the FIRST call must surface errors, not swallow them
   const floor = 0.12;      // never fully dark — a glow, not an off
-  const cycleSteps = 4;    // phase steps per fade — see 2026-07-12 note below on why this is low
-  // RANDOMIZED 2026-07-20 (jford: "it's not random — it's doing big sections
-  // at a time, four or five lights moving together, instead of completely
-  // random up and down the strand, like drops of rain"): the previous design
-  // split the strip into 2-4 large CONTIGUOUS zones (segments 0-3, 4-7, ...)
-  // — every segment in a zone shared the exact same brightness at the exact
-  // same moment, which reads as a few big blocks pulsing in unison, not
-  // scattered independent twinkling. Two changes fix this:
-  // (1) segments are assigned to "points" by INTERLEAVING (i % points), not
-  //     contiguous chunking — so any one point's segments are scattered
-  //     across the WHOLE strip, not clustered in one region.
-  // (2) more, smaller points (up to 8, vs the old 2-4), each with its OWN
-  //     randomized starting phase (not evenly spaced) — and instead of a
-  //     predictable round-robin visiting order, each tick updates a couple
-  //     of RANDOMLY chosen points, so the sequence itself feels organic.
-  //     Sending 3 calls/tick (not 1) is still rate-limit-safe — bounce already
-  //     proves multiple calls/tick to one device works fine at a similar floor.
-  const rawPoints = Math.min(8, Math.max(4, Math.round(count / 2)));
-  const allSegs = Array.from({ length: rawPoints }, () => []);
-  for (let i = 0; i < count; i++) allSegs[i % rawPoints].push(i);
-  const pointSegs = allSegs.filter((s) => s.length);   // drop any point that ended up with zero segments (small strips)
-  const points = pointSegs.length;
-  const pointPhase = pointSegs.map(() => Math.floor(Math.random() * cycleSteps));   // randomized start, not evenly staggered
-  const UPDATES_PER_TICK = Math.min(3, points);   // 3/tick keeps cycle time close to the earlier "a second or two" target even with more, scattered points — bounce already proves 3+ calls/tick is safe at this floor
+  const cycleSteps = 4;    // phase steps per fade — see 2026-07-12 note on why this is low
+  // TRUE SINGLE-SEGMENT POINTS 2026-07-21 (jford: "it's twinkling small groups
+  // of lights instead of single random lights throughout the strand" — a real
+  // regression from the 2026-07-20 "randomize" pass). That pass scattered
+  // segments across the strip correctly, but grouped them into up to 8
+  // "points" — for a typical 15-segment strip that meant most points still
+  // contained 2 segments, so a single update visibly moved a PAIR of lights,
+  // not one. Fixed properly this time: one point per PHYSICAL segment, full
+  // stop — `points = count`, each point is exactly one segment, no grouping
+  // at all. Genuinely single, independent, randomly-timed lights.
+  const points = count;
+  const pointPhase = Array.from({ length: points }, () => Math.floor(Math.random() * cycleSteps));   // randomized start, not evenly staggered
+  // Dialed back 3→2 calls/tick alongside this fix (jford also reported
+  // commands not taking / sections of the strip going unresponsive — could be
+  // this animation pushing too close to Govee's real rate limit with MORE,
+  // smaller points now needing MORE total updates to cover the whole strip).
+  // Also see armSegTimer above: a 30-min safety auto-stop now protects
+  // against a forgotten-but-still-running twinkle fighting other changes.
+  const UPDATES_PER_TICK = Math.min(2, points);
   let busy = false;
-  // floor/speed reasoning from 2026-07-12 ("much faster" + "a second or two"
-  // fixes) still applies — bumped slightly (150→220ms) since this now sends
-  // up to 3 calls/tick instead of 1, matching bounce's proven-safe floor for
-  // multi-call ticks.
-  const tickMs = Math.max(220, stepMs || 500);
-  const phaseStep = (stepMs && stepMs < 220) ? Math.min(4, Math.max(1, Math.round(220 / stepMs))) : 1;
+  const tickMs = Math.max(250, stepMs || 500);
+  const phaseStep = (stepMs && stepMs < 250) ? Math.min(4, Math.max(1, Math.round(250 / stepMs))) : 1;
   const colorFor = (p) => {
     const t = pointPhase[p] / cycleSteps;
     const factor = floor + (1 - floor) * (1 - Math.cos(t * 2 * Math.PI)) / 2;
@@ -387,21 +399,30 @@ async function runTwinkle(id, count, cols, stepMs) {
       while (picked.size < Math.min(UPDATES_PER_TICK, points)) picked.add(Math.floor(Math.random() * points));
       const calls = [...picked].map((p) => {
         pointPhase[p] = (pointPhase[p] + phaseStep) % cycleSteps;
-        const call = segControl(id, pointSegs[p], colorFor(p));
+        const call = segControl(id, [p], colorFor(p));
         return strict ? call : call.catch(() => {});
       });
       await (strict ? Promise.all(calls) : Promise.allSettled(calls));
     } finally { busy = false; }
   };
   await tick(true);
-  segAnimTimers[id] = setInterval(() => tick(false).catch(() => {}), tickMs);
+  armSegTimer(id, setInterval(() => tick(false).catch(() => {}), tickMs));
 }
 // Whole-device twinkle/breathe fallback for lights that AREN'T addressable
 // (no segments): fades the actual brightness capability slowly up and down
 // via a cosine ramp, instead of the color-cycle used by other patterns —
 // this is the real fix for "sharp brightness change, not a slow glowing fade."
 let breatheTimers = {};   // deviceId -> interval handle, independent per device
-function stopBreathe(id) { if (breatheTimers[id]) { clearInterval(breatheTimers[id]); delete breatheTimers[id]; } }
+let breatheAutoStop = {};   // same 30-min safety net as segAnimTimers — see armSegTimer's comment
+function armBreatheTimer(id, handle) {
+  breatheTimers[id] = handle;
+  clearTimeout(breatheAutoStop[id]);
+  breatheAutoStop[id] = setTimeout(() => stopBreathe(id), MAX_ANIM_MS);
+}
+function stopBreathe(id) {
+  if (breatheTimers[id]) { clearInterval(breatheTimers[id]); delete breatheTimers[id]; }
+  if (breatheAutoStop[id]) { clearTimeout(breatheAutoStop[id]); delete breatheAutoStop[id]; }
+}
 async function runBreatheWhole(id, rgb, stepMs) {
   stopBreathe(id);
   await setPower(id, true);          // first calls throw on real failure — see runTwinkle's comment
@@ -428,7 +449,7 @@ async function runBreatheWhole(id, rgb, stepMs) {
     } finally { busy = false; }
   };
   await tick(true);
-  breatheTimers[id] = setInterval(() => tick(false).catch(() => {}), step);
+  armBreatheTimer(id, setInterval(() => tick(false).catch(() => {}), step));
 }
 // Shared by the live /govee/segscene route AND scheduled/triggered scenes
 // (runAction, IFTTT) so a segment pattern behaves identically either way.

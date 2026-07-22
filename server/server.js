@@ -100,6 +100,58 @@ async function govee(path, body) {
   if (!res.ok) throw new Error(`govee ${res.status}: ${await res.text().catch(() => "")}`);
   return res.json();
 }
+// RATE LIMITER 2026-07-22 (jford screenshotted a real "govee 429" toast +
+// reported recurring "big sections of no lights" across MULTIPLE zones —
+// pool, and two other segments at the house). Root cause, confirmed against
+// Govee's actual published Cloud API limits: /device/control allows only
+// 120 req/min PER DEVICE (2/sec sustained, 6 burst) and 720 req/min PER
+// ACCOUNT (12/sec sustained, 80 burst). Every segment-animation tick fires
+// 1-6 concurrent control calls (one per lit color group / dim group), every
+// 110-460ms — 2 to 10x over the per-device budget. The first tick or two
+// gets through on burst capacity, then Govee starts rejecting with 429 and
+// those segments just never receive their color: the "dead sections" bug.
+// This queues EVERY /device/control call through a token bucket per device
+// (and a shared account-wide bucket) instead of firing them immediately —
+// calls that would exceed budget wait their turn rather than getting
+// dropped. Slightly under Govee's real numbers on purpose, for headroom.
+function makeBucket(capacity, refillPerSec) { return { tokens: capacity, capacity, refillPerSec, last: Date.now() }; }
+function refillBucket(b) {
+  const now = Date.now();
+  b.tokens = Math.min(b.capacity, b.tokens + ((now - b.last) / 1000) * b.refillPerSec);
+  b.last = now;
+}
+const acctBucket = makeBucket(70, 10);     // Govee: 80 burst / 12 per sec
+const deviceBuckets = {};                  // deviceId -> bucket, Govee: 6 burst / 2 per sec
+function deviceBucket(id) { return deviceBuckets[id] || (deviceBuckets[id] = makeBucket(5, 1.8)); }
+let ctlQueue = [];   // {id, fn, resolve, reject}
+let pumping = false;
+function queueControl(id, fn) {
+  return new Promise((resolve, reject) => {
+    ctlQueue.push({ id, fn, resolve, reject });
+    pump();
+  });
+}
+function pump() {
+  if (pumping) return;
+  pumping = true;
+  const step = () => {
+    refillBucket(acctBucket);
+    for (let i = 0; i < ctlQueue.length; i++) {
+      const item = ctlQueue[i];
+      const db = deviceBucket(item.id);
+      refillBucket(db);
+      if (acctBucket.tokens >= 1 && db.tokens >= 1) {
+        acctBucket.tokens -= 1; db.tokens -= 1;
+        ctlQueue.splice(i, 1);
+        item.fn().then(item.resolve, item.reject);
+        i--;
+      }
+    }
+    if (ctlQueue.length) setTimeout(step, 60);
+    else pumping = false;
+  };
+  step();
+}
 
 let deviceMap = {};   // device id -> { sku, deviceName, capabilities }
 async function listDevices() {
@@ -130,10 +182,10 @@ function normalizeState(payload) {
 }
 async function control(deviceId, type, instance, value) {
   const sku = await resolveSku(deviceId);
-  return govee("/device/control", {
+  return queueControl(deviceId, () => govee("/device/control", {
     requestId: randomUUID(),
     payload: { sku, device: deviceId, capability: { type, instance, value } },
-  });
+  }));
 }
 // thin wrappers used by the scene engine + automations
 const setPower  = (id, on)  => control(id, "devices.capabilities.on_off",        "powerSwitch", on ? 1 : 0);
@@ -291,10 +343,10 @@ function deviceSegCount(id) {
 }
 async function segControl(id, segs, rgb) {
   const sku = await resolveSku(id);
-  return govee("/device/control", {
+  return queueControl(id, () => govee("/device/control", {
     requestId: randomUUID(),
     payload: { sku, device: id, capability: { type: "devices.capabilities.segment_color_setting", instance: "segmentedColorRgb", value: { segment: segs, rgb } } },
-  });
+  }));
 }
 async function runChase(id, count, cols, bandWidth, stepMs) {
   stopSegAnim(id); await setPower(id, true).catch(() => {});

@@ -746,7 +746,7 @@ const ActiveScene = {
     if(ch) localStorage.setItem("gv_active_scene", JSON.stringify(a)); },
   mark(id,name,pattern){ const a=this.all(); a[id]={name,pattern,ts:Date.now()}; localStorage.setItem("gv_active_scene", JSON.stringify(a)); },
 };
-const SEG_PATTERNS = ["chase","wave","strobe","bounce","twinkle"];
+const SEG_PATTERNS = ["chase","wave","strobe","bounce","twinkle","show"];
 async function stopSceneFor(ids){
   const recs = ids.map(id=>({id, rec:ActiveScene.get(id)})).filter(x=>x.rec);
   if(!recs.length) return;

@@ -253,6 +253,34 @@ function armSegTimer(id, handle) {
 function stopSegAnim(id) {
   if (segAnimTimers[id]) { clearInterval(segAnimTimers[id]); delete segAnimTimers[id]; }
   if (segAutoStop[id]) { clearTimeout(segAutoStop[id]); delete segAutoStop[id]; }
+  if (showTimers[id]) { clearTimeout(showTimers[id]); delete showTimers[id]; }
+  if (showAutoStop[id]) { clearTimeout(showAutoStop[id]); delete showAutoStop[id]; }
+}
+// SHOW 2026-07-21 (jford: "do we have any preset dancing scenes that arent
+// just a single movement in one direction... like a true production?") —
+// a Show is a scripted sequence of steps, each its own {pattern,cols,step,
+// duration}, that plays one after another and loops. It's built ON TOP of
+// the existing pattern functions (each step just calls dispatchSegPattern),
+// with its own outer "advance to next step" timer. showTimers/showAutoStop
+// are cleared by stopSegAnim above so any existing stop path (Stop button,
+// applying a different scene, the segAutoStop 30-min net) cancels a show
+// cleanly instead of leaving a zombie timer that restarts the next step.
+let showTimers = {};     // deviceId -> the "advance to next step" timeout
+let showAutoStop = {};   // deviceId -> ABSOLUTE 30-min cap for the whole show (not reset per-step)
+function stopShow(id) {
+  if (showTimers[id]) { clearTimeout(showTimers[id]); delete showTimers[id]; }
+  if (showAutoStop[id]) { clearTimeout(showAutoStop[id]); delete showAutoStop[id]; }
+}
+function runShow(id, count, steps) {
+  let stepIndex = 0;
+  const advance = () => {
+    const s = steps[stepIndex % steps.length];
+    stepIndex++;
+    dispatchSegPattern(id, count, s.cols, s.pattern, s.bandWidth, s.bandCount, s.step);
+    showTimers[id] = setTimeout(advance, s.duration || 4000);
+  };
+  advance();
+  showAutoStop[id] = setTimeout(() => stopSegAnim(id), MAX_ANIM_MS);
 }
 function deviceSegCount(id) {
   const d = deviceMap[id]; if (!d) return 0;
@@ -467,6 +495,11 @@ function dispatchSegPattern(id, count, cols, pattern, bandWidth, bandCount, step
 // apply picker does, but driven server-side (for cron/IFTTT firing).
 async function applySceneToIds(scene, ids) {
   if (!ids.length) return;
+  if (scene.show && scene.show.length) {
+    const capable = ids.filter((id) => deviceSegCount(id) > 0);
+    if (capable.length) await Promise.allSettled(capable.map((id) => runShow(id, deviceSegCount(id), scene.show)));
+    return;
+  }
   if (scene.pattern) {
     const capable = ids.filter((id) => deviceSegCount(id) > 0);
     const plain = ids.filter((id) => !capable.includes(id));
@@ -505,10 +538,26 @@ app.post("/govee/segscene", gate, async (req, res) => {
   } catch (e) { res.status(502).json({ error: e.message }); }
 });
 app.post("/govee/segscene/stop", gate, (req, res) => {
-  const ids = req.body.devices || [...new Set([...Object.keys(segAnimTimers), ...Object.keys(breatheTimers)])];
+  const ids = req.body.devices || [...new Set([...Object.keys(segAnimTimers), ...Object.keys(breatheTimers), ...Object.keys(showTimers)])];
   ids.forEach(stopSegAnim);
   ids.forEach(stopBreathe);
   res.json({ ok: true });
+});
+// A "Show" is a scripted sequence of pattern steps (chase for a bit, then
+// bounce, then a strobe burst, then wave...) instead of one static pattern
+// for the whole scene — see runShow() above. Segment-capable devices only;
+// there's no meaningful whole-device fallback for a multi-step sequence.
+app.post("/govee/show", gate, async (req, res) => {
+  try {
+    if (!Object.keys(deviceMap).length) await listDevices();
+    const ids = req.body.devices || [];
+    const steps = req.body.steps || [];
+    if (!steps.length) return res.status(400).json({ error: "no show steps given" });
+    const targets = ids.filter((id) => deviceSegCount(id) > 0);
+    if (!targets.length) return res.status(400).json({ error: "no segment-capable devices in the target list" });
+    targets.forEach((id) => runShow(id, deviceSegCount(id), steps));
+    res.json({ ok: true, targets });
+  } catch (e) { res.status(502).json({ error: e.message }); }
 });
 
 // Flash a light (or all) N times in a color, then restore. Reuses flash() below.

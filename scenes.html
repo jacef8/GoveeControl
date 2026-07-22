@@ -493,6 +493,25 @@ async function executeApply(scene, kind, ids){
     }
     return;
   }
+  if(scene.show && scene.show.length){   // multi-step production: segment-capable devices only, no meaningful whole-device fallback
+    const capable = ids.filter(id=>{ const d=DEVICES.find(x=>x.device===id); return d && deviceHasSegments(d); });
+    const plain = ids.filter(id=>!capable.includes(id));
+    if(!capable.length){
+      toast(`"${scene.name}" needs an addressable strip — none of ${label} support it`, true);
+      msg(`Couldn't apply "${scene.name}": no segment-capable devices selected`);
+      return;
+    }
+    try{
+      await startShow(capable, scene.show);
+      markScene(capable, scene.name, "show");
+      const note = plain.length ? ` (${plain.length} without segments were skipped)` : "";
+      toast(`Applied "${scene.name}" to ${capable.length===1?"1 light":capable.length+" lights"}${note}`);
+      msg(`Applied "${scene.name}"${note}`);
+    }catch(e){
+      toast(`Failed to apply "${scene.name}": ${e.message}`, true); msg(`Failed to apply "${scene.name}": ${e.message}`);
+    }
+    return;
+  }
   if(scene.pattern==="twinkle"){   // twinkle handles segment-capable (per-segment breathe) AND whole-device (single breathe) server-side — one call covers everyone
     try{
       await startSegScene(ids, "twinkle", scene.cols, scene.step, scene.bandWidth, scene.bandCount);
@@ -655,10 +674,10 @@ function delSaved(i){ SAVED.splice(i,1); saveSavedStore(); renderSaved(); if(typ
 renderSaved();
 
 /* ---------- scene library (pre-animated presets, run by the server animator) ---------- */
-const LIB_CATS = ["All","Signature","Movement","Party","Calm","Nature","Holidays"];
+const LIB_CATS = ["All","Shows","Signature","Movement","Party","Calm","Nature","Holidays"];
 const SEASON_EMOJI = {Winter:"❄️", Spring:"🌸", Summer:"☀️", Fall:"🍂"};
-const PATTERN_EMOJI = {chase:"💫", wave:"🌊", strobe:"⚡", bounce:"🎆", twinkle:"✨"};
-const MOTION_TYPES = ["All","Solid","Cycle","Chase","Wave","Strobe","Bounce","Twinkle"];
+const PATTERN_EMOJI = {chase:"💫", wave:"🌊", strobe:"⚡", bounce:"🎆", twinkle:"✨", show:"🎭"};
+const MOTION_TYPES = ["All","Solid","Cycle","Chase","Wave","Strobe","Bounce","Twinkle","Show"];
 // motion classification: a segment pattern, a whole-device color cycle, or a fixed static look
 function motionType(p){
   if(p.pattern) return p.pattern[0].toUpperCase()+p.pattern.slice(1);   // chase/wave/strobe/bounce
@@ -678,6 +697,7 @@ function energyLevel(p){
   const bands = p.bandCount || 1;
   let score = 0;
   if(p.pattern==="strobe") score += 3;
+  else if(p.pattern==="show") score += 3;   // a scripted multi-pattern sequence always reads as a full production
   else if(p.pattern==="bounce") score += 2 + Math.max(0, bands-2);
   else if(p.pattern==="chase") score += 1 + (p.bandWidth>=4 ? 1 : 0);
   else if(p.pattern==="wave") score += 1;
@@ -716,6 +736,45 @@ function colorFamily(cols){
   return "Purple/Pink";
 }
 const PRESETS = [
+  // "Shows" are real scripted productions — they sequence through SEVERAL
+  // different patterns and color sets over time (chase, then bounce, then a
+  // strobe burst, then a wave...) instead of one static pattern running the
+  // whole time, the way every other preset below works. `show` is the actual
+  // step sequence sent to the server; `pattern`/`cols`/`step` are just a
+  // representative summary so this tile classifies/previews/filters like any
+  // other scene. Segment-capable (RGBIC) devices only.
+  {name:"Dance Party", cat:"Shows", pattern:"show", motion:true, step:170,
+    cols:[[255,0,140],[0,200,255],[255,215,0],[120,255,80],[0,220,255],[140,80,255],[255,255,255]],
+    show:[
+      {pattern:"chase",  cols:[[255,0,140],[0,200,255],[255,215,0],[120,255,80]], bandWidth:4, step:170, duration:4000},
+      {pattern:"bounce", cols:[[255,0,140],[0,220,255],[140,80,255]], bandWidth:2, bandCount:5, step:220, duration:4000},
+      {pattern:"strobe", cols:[[255,255,255],[255,0,140],[0,220,255],[255,215,0]], step:110, duration:2000},
+      {pattern:"wave",   cols:[[255,0,140],[0,200,255],[255,215,0],[120,255,80],[140,80,255]], step:280, duration:4000},
+    ]},
+  {name:"Club Night", cat:"Shows", pattern:"show", motion:true, step:150,
+    cols:[[0,255,255],[255,0,255],[255,255,255],[140,255,0],[255,255,0]],
+    show:[
+      {pattern:"strobe", cols:[[0,255,255],[255,0,255],[255,255,255]], step:110, duration:1600},
+      {pattern:"chase",  cols:[[0,255,255],[255,0,255],[140,255,0]], bandWidth:3, step:150, duration:4000},
+      {pattern:"bounce", cols:[[255,0,255],[0,255,255],[140,255,0],[255,255,0]], bandWidth:2, bandCount:4, step:210, duration:4000},
+      {pattern:"wave",   cols:[[0,255,255],[255,0,255],[140,255,0],[255,255,0]], step:270, duration:3500},
+    ]},
+  {name:"Fireworks Finale", cat:"Shows", pattern:"show", motion:true, step:150,
+    cols:[[255,60,20],[255,215,0],[255,255,255],[0,0,0],[255,90,20],[180,30,30]],
+    show:[
+      {pattern:"chase",  cols:[[255,60,20],[255,215,0],[255,255,255]], bandWidth:3, step:150, duration:3500},
+      {pattern:"strobe", cols:[[255,255,255],[255,215,0],[255,60,20],[0,0,0]], step:110, duration:2000},
+      {pattern:"bounce", cols:[[255,215,0],[255,90,20],[255,255,255]], bandWidth:2, bandCount:4, step:210, duration:3500},
+      {pattern:"wave",   cols:[[255,60,20],[255,215,0],[180,30,30]], step:320, duration:3500},
+    ]},
+  {name:"Holiday Spectacular", cat:"Shows", pattern:"show", motion:true, step:160,
+    cols:[[200,20,30],[20,140,50],[255,215,0],[255,255,255]],
+    show:[
+      {pattern:"chase",  cols:[[200,20,30],[20,140,50],[255,215,0]], bandWidth:4, step:160, duration:4000},
+      {pattern:"wave",   cols:[[200,20,30],[20,140,50],[255,215,0],[255,255,255]], step:300, duration:4000},
+      {pattern:"bounce", cols:[[255,215,0],[200,20,30],[20,140,50]], bandWidth:2, bandCount:4, step:220, duration:3500},
+      {pattern:"strobe", cols:[[255,255,255],[255,215,0]], step:130, duration:1800},
+    ]},
   // "Movement" scenes animate UP AND DOWN individual strip segments (chase/wave)
   // instead of just cycling the whole light's color — only runs on RGBIC strips
   // that report segments; other lights fall back to a plain color cycle.
@@ -876,7 +935,7 @@ function renderLibrary(){
       <div style="font-size:11px;color:var(--dim);margin-top:2px">${subtitle} · ${colorFamily(p.cols)} · ${ENERGY_EMOJI[energy]} ${energy}</div></div>`;
   }).join("");
 }
-function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", origin:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth, bandCount:p.bandCount}; }
+function presetToScene(p){ return {name:p.name, motion:p.motion, step:p.step, via:"library", origin:"library", targets:currentTargets(), cols:p.cols, pattern:p.pattern, bandWidth:p.bandWidth, bandCount:p.bandCount, show:p.show}; }
 
 /* ---------- device built-in scenes (smooth, hardware-run) ---------- */
 async function getBuiltinScenes(){
@@ -920,6 +979,16 @@ async function startSegScene(ids, pattern, cols, step, bandWidth, bandCount){
     const j = await r.json().catch(()=>({}));
     throw new Error(j.error || `segscene request failed (${r.status})`);
   }
+  return true;
+}
+// A "Show" is a scripted sequence of steps (chase for a bit, then bounce, then
+// a strobe burst, then wave...) instead of one static pattern the whole time —
+// see runShow() server-side. Segment-capable devices only, same as chase/wave.
+async function startShow(ids, steps){
+  if(CONFIG.USE_MOCK) return true;
+  const r = await fetch(CONFIG.PROXY_BASE+"/govee/show",{method:"POST",headers:phdr(),
+    body:JSON.stringify({devices:ids, steps})});
+  if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.error || `show request failed (${r.status})`); }
   return true;
 }
 // The Cloud API gives built-in scenes as name+id only (no colors), so we infer a

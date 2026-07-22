@@ -290,6 +290,13 @@
   .movepat.active{background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2)); color:#052730}
   .ld-act:active{transform:scale(.96)}
   .ld-act:disabled{opacity:.4; cursor:not-allowed}
+  /* Start/Stop pairs used to be two identical gray buttons ("cant tell if
+     the start or stop button is selected") — Start now reads as the clear
+     primary action (filled, matches the tab/chip active language), Stop as
+     a distinct danger-outline so the two are never visually interchangeable. */
+  .ld-act-primary{background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2)); color:#052730; border-color:transparent; font-weight:800;
+    box-shadow:0 8px 20px -8px rgba(41,195,240,.6), inset 0 1px 0 rgba(255,255,255,.35)}
+  .ld-act-danger{color:#ff8a8a; border-color:#6e2f2f; background:var(--sheen), rgba(110,47,47,.12)}
   .ld-dim{color:var(--ink-faint); font-size:13px; margin-top:8px}
   .ld-debug{border-top:1px solid var(--glass-border-soft); margin-top:0; padding:16px 0 4px}
   .ld-debug summary{cursor:pointer; font-size:12.5px; color:var(--ink-faint); font-weight:600; list-style:none}
@@ -950,15 +957,18 @@ function groupEffectsPaneHTML(name, list, st){
   const patternChips = MOVE_PATTERNS.map(p=>`<button class="movepat ${p.key===pattern?'active':''}" data-groupmovepattern="${p.key}"><span class="ico3">${p.icon}</span>${p.label}</button>`).join("");
   const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-groupmoveswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
   const running = list.some(d=>SEG_PATTERNS.includes(ActiveScene.get(d.device)?.pattern));
+  const pendingNote = running
+    ? `<div class="ld-dim" style="color:#ffcf6b;margin:6px 0 0">⚠ Picking a pattern below only stages it — lights keep running whatever they're already on until you tap ▶ Start.</div>` : '';
   return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎇</span>Movement${running?'<span class="ld-val" style="color:#7cf5b8">Running</span>':''}</div>
       <div class="ld-dim" style="margin-bottom:10px">Runs independently on every light in this group — pick a pattern, color, and speed, then start it.</div>
+      ${pendingNote}
       <div class="movepats">${patternChips}</div>
       <div class="ld-sws" style="margin-top:12px">${swatches}<input type="color" class="swatch picker" data-groupmovepick value="${rgbHex(color)}" title="Custom color"></div>
       <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-groupmovespeedval>${MOVE_SPEED_LABELS[lvl]}</span></div>
       <input type="range" min="1" max="10" value="${lvl}" data-groupmovespeed style="--p:${(lvl-1)/9*100}%">
       <div class="ld-actions" style="margin-top:12px">
-        <button class="ld-act" data-groupmovestart>▶ Start</button>
-        <button class="ld-act" data-groupmovestop>■ Stop</button>
+        <button class="ld-act ld-act-primary" data-groupmovestart>▶ Start</button>
+        <button class="ld-act ld-act-danger" data-groupmovestop>■ Stop</button>
       </div></div>
     <div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
       <div class="ld-actions">
@@ -1375,15 +1385,25 @@ function movementCardHTML(d){
   const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-moveswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
   const runningRec = ActiveScene.get(d.device);
   const running = runningRec && SEG_PATTERNS.includes(runningRec.pattern);
+  // "what i icked on the app doesnt seem to be what its doing" — tapping a
+  // pattern chip only STAGES a choice in this form; it doesn't take effect
+  // on the light until you tap Start. When the staged pick differs from
+  // what's actually running, say so explicitly instead of letting the
+  // highlighted chip silently imply it's already live.
+  const pendingLabel = running && runningRec.pattern!==pattern
+    ? (MOVE_PATTERNS.find(p=>p.key===pattern)?.label || pattern) : null;
+  const pendingNote = pendingLabel
+    ? `<div class="ld-dim" style="color:#ffcf6b;margin:6px 0 0">⚠ ${pendingLabel} is picked below but not started yet — the light is still running ${runningRec.name}. Tap ▶ Start to switch.</div>` : '';
   return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎇</span>Movement${running?`<span class="ld-val" style="color:#7cf5b8">Running: ${runningRec.name}</span>`:''}</div>
     <div class="ld-dim" style="margin-bottom:10px">Pick a pattern, color, and speed, then start it on this light.</div>
+    ${pendingNote}
     <div class="movepats">${patternChips}</div>
     <div class="ld-sws" style="margin-top:12px">${swatches}<input type="color" class="swatch picker" value="${rgbHex(color)}" data-movepick ${d.online?'':'disabled'} title="Custom color"></div>
     <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-movespeedval>${MOVE_SPEED_LABELS[lvl]}</span></div>
     <input type="range" min="1" max="10" value="${lvl}" data-movespeed ${d.online?'':'disabled'} style="--p:${(lvl-1)/9*100}%">
     <div class="ld-actions" style="margin-top:12px">
-      <button class="ld-act" data-movestart ${d.online?'':'disabled'}>▶ Start</button>
-      <button class="ld-act" data-movestop ${d.online?'':'disabled'}>■ Stop</button>
+      <button class="ld-act ld-act-primary" data-movestart ${d.online?'':'disabled'}>▶ Start</button>
+      <button class="ld-act ld-act-danger" data-movestop ${d.online?'':'disabled'}>■ Stop</button>
     </div></div>`;
 }
 async function startMovement(d){

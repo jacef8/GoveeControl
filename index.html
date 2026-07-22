@@ -1185,11 +1185,23 @@ function debugSection(d,seg){
   const rl = LAST_HEALTH?.goveeRateLimit;
   const rlText = rl ? Object.entries(rl).filter(([k])=>k!=="path"&&k!=="status"&&k!=="at").map(([k,v])=>`${k}: ${v}`).join(", ") + ` (as of ${new Date(rl.at).toLocaleTimeString()})`
     : "no rate-limit headers seen yet this session — trigger any scene/control, then reopen this panel";
+  // TEMP DIAGNOSTIC 2026-07-22: some lights (e.g. multi-string outdoor kits)
+  // report the SAME capability type more than once, each covering a
+  // DIFFERENT physical string/zone (own instance name, own segment range).
+  // Our segment code only ever reads the FIRST match — if a light has 2+
+  // segment_color_setting entries, we may be silently ignoring the rest of
+  // the physical strip. This dumps every one raw so it's visible from the
+  // phone without needing server log access.
+  const segCaps = (d.capabilities||[]).filter(c=>c.type==="devices.capabilities.segment_color_setting");
+  const segCapsText = segCaps.length>1
+    ? segCaps.map((c,i)=>`#${i+1} instance="${c.instance||"?"}" fields=${JSON.stringify(c.parameters?.fields||[])}`).join("<br>")
+    : null;
   const rows = [
     ["Device ID", d.device],
     ["SKU / model", d.sku||"?"],
     ["Govee reports online", d.online ? "yes" : "no — commands are skipped for offline lights"],
     ["Capabilities", caps],
+    ...(segCapsText ? [["⚠ Multiple segment capabilities", segCapsText]] : []),
     ["Segment support", seg.supported ? `yes, ${seg.count} segments` : "no — movement scenes fall back to a color cycle on this light"],
     ["Govee API quota", rlText],
   ];

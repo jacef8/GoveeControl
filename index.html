@@ -279,6 +279,15 @@
   .ldm-tab:active{transform:scale(.95)}
   .ldm-tab.active{background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2)); color:#052730;
     box-shadow:0 8px 20px -8px rgba(41,195,240,.6), inset 0 1px 0 rgba(255,255,255,.35)}
+  /* movement-pattern picker (Twinkle/Chase/Wave/Strobe/Bounce) — same active-
+     fill language as the tab bar, just smaller/inline for 5-across */
+  .movepats{display:flex; gap:6px; flex-wrap:wrap}
+  .movepat{flex:1; min-width:56px; display:flex; flex-direction:column; align-items:center; gap:3px;
+    border:1px solid var(--glass-border-soft); background:var(--surface-2); color:var(--ink-2);
+    font:600 11px 'Inter',system-ui; padding:8px 3px; border-radius:10px; cursor:pointer}
+  .movepat .ico3{font-size:15px; line-height:1}
+  .movepat:active{transform:scale(.94)}
+  .movepat.active{background:linear-gradient(160deg,var(--gv-cyan),var(--gv-cyan-2)); color:#052730}
   .ld-act:active{transform:scale(.96)}
   .ld-act:disabled{opacity:.4; cursor:not-allowed}
   .ld-dim{color:var(--ink-faint); font-size:13px; margin-top:8px}
@@ -869,7 +878,7 @@ function closeLight(){ const ov=document.getElementById("liteOverlay"); if(ov) o
    here targets every device in the group via Promise.allSettled +
    reportGroupFailures, same pattern the tile's own quick controls already use.
    ============================================================ */
-let GROUP_UI = {};   // group name -> {tab, twinkleColor, twinkleSpeedLvl}
+let GROUP_UI = {};   // group name -> {tab, movePattern, moveColor, moveSpeedLvl}
 function openGroupDetail(name){
   let ov=document.getElementById("groupOverlay");
   if(!ov){
@@ -902,20 +911,24 @@ async function groupToggleAll(name, list, want){
   list.forEach(d=>{ d._state.on=want; touch(d); }); render(); renderGroupDetail();
   const rs=await Promise.allSettled(list.map(d=>Govee.setPower(d.device,want))); reportGroupFailures(list,rs,name);
 }
-async function groupStartTwinkle(name, list, color, speedLvl){
+async function groupStartMovement(name, list, pattern, color, speedLvl){
   if(CONFIG.USE_MOCK){ toast("Demo mode — connect in Settings to actually run this"); return; }
   const ids=list.map(d=>d.device);
   await stopSceneFor(ids);
   const {r,g,b}=Govee.intToRgb(color);
-  const step=twinkleStepMs(speedLvl);
+  const step=movementStepMs(pattern, speedLvl);
+  const cols = pattern==="wave" ? shadesOf(r,g,b,3) : [[r,g,b]];
+  const body = {devices:ids, pattern, cols, step};
+  if(pattern==="chase" || pattern==="bounce"){ body.bandWidth=3; body.bandCount=3; }
+  const label = MOVE_PATTERNS.find(p=>p.key===pattern)?.label || pattern;
   try{
     const res=await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",
       headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
-      body:JSON.stringify({devices:ids, pattern:"twinkle", cols:[[r,g,b]], step})});
+      body:JSON.stringify(body)});
     if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ("HTTP "+res.status));
-    ids.forEach(id=>ActiveScene.mark(id,"Twinkle","twinkle"));
-    toast("Twinkle started on "+name); render(); renderGroupDetail();
-  }catch(e){ toast("Couldn't start Twinkle: "+e.message, true); }
+    ids.forEach(id=>ActiveScene.mark(id,label,pattern));
+    toast(label+" started on "+name); render(); renderGroupDetail();
+  }catch(e){ toast("Couldn't start "+label+": "+e.message, true); }
 }
 function groupColorPaneHTML(name, list, online){
   const avg = online.length ? Math.round(online.reduce((s,d)=>s+d._state.brightness,0)/online.length) : 60;
@@ -931,18 +944,21 @@ function groupColorPaneHTML(name, list, online){
     </div>`;
 }
 function groupEffectsPaneHTML(name, list, st){
-  const color = st.twinkleColor ?? 0xffb454;
-  const lvl = st.twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT;
-  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-grouptwinkleswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
-  const running = list.some(d=>ActiveScene.get(d.device)?.pattern==="twinkle");
-  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">✨</span>Twinkle${running?'<span class="ld-val" style="color:#7cf5b8">Running</span>':''}</div>
-      <div class="ld-dim" style="margin-bottom:10px">Runs independently on every light in this group — pick a color and speed, then start it.</div>
-      <div class="ld-sws">${swatches}<input type="color" class="swatch picker" data-grouptwinklepick value="${rgbHex(color)}" title="Custom twinkle color"></div>
-      <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-grouptwinklespeedval>${TWINKLE_SPEED_LABELS[lvl]}</span></div>
-      <input type="range" min="1" max="10" value="${lvl}" data-grouptwinklespeed style="--p:${(lvl-1)/9*100}%">
+  const pattern = st.movePattern || "twinkle";
+  const color = st.moveColor ?? 0xffb454;
+  const lvl = st.moveSpeedLvl || MOVE_SPEED_DEFAULT;
+  const patternChips = MOVE_PATTERNS.map(p=>`<button class="movepat ${p.key===pattern?'active':''}" data-groupmovepattern="${p.key}"><span class="ico3">${p.icon}</span>${p.label}</button>`).join("");
+  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-groupmoveswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
+  const running = list.some(d=>SEG_PATTERNS.includes(ActiveScene.get(d.device)?.pattern));
+  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎇</span>Movement${running?'<span class="ld-val" style="color:#7cf5b8">Running</span>':''}</div>
+      <div class="ld-dim" style="margin-bottom:10px">Runs independently on every light in this group — pick a pattern, color, and speed, then start it.</div>
+      <div class="movepats">${patternChips}</div>
+      <div class="ld-sws" style="margin-top:12px">${swatches}<input type="color" class="swatch picker" data-groupmovepick value="${rgbHex(color)}" title="Custom color"></div>
+      <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-groupmovespeedval>${MOVE_SPEED_LABELS[lvl]}</span></div>
+      <input type="range" min="1" max="10" value="${lvl}" data-groupmovespeed style="--p:${(lvl-1)/9*100}%">
       <div class="ld-actions" style="margin-top:12px">
-        <button class="ld-act" data-grouptwinklestart>▶ Start Twinkle</button>
-        <button class="ld-act" data-grouptwinklestop>■ Stop</button>
+        <button class="ld-act" data-groupmovestart>▶ Start</button>
+        <button class="ld-act" data-groupmovestop>■ Stop</button>
       </div></div>
     <div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
       <div class="ld-actions">
@@ -968,7 +984,7 @@ function renderGroupDetail(){
   const onCount=online.filter(d=>d._state.on).length;
   const anyOn=onCount>0;
   const gid=(GROUPS.find(g=>g.name===name)||{}).id;
-  const st=(GROUP_UI[name] ||= {tab:"color", twinkleColor:0xffb454, twinkleSpeedLvl:TWINKLE_SPEED_DEFAULT});
+  const st=(GROUP_UI[name] ||= {tab:"color", movePattern:"twinkle", moveColor:0xffb454, moveSpeedLvl:MOVE_SPEED_DEFAULT});
   card.style.cssText="width:min(540px,100%);box-sizing:border-box;"+
     "background:linear-gradient(160deg, rgba(255,255,255,.09), rgba(255,255,255,0) 30%), rgba(21,19,31,.82);"+
     "backdrop-filter:blur(34px) saturate(160%);-webkit-backdrop-filter:blur(34px) saturate(160%);"+
@@ -1023,13 +1039,15 @@ function renderGroupDetail(){
   const gpick=q("[data-grouppick]"); if(gpick) gpick.oninput=()=>{ clearTimeout(gpick._t); gpick._t=setTimeout(()=>{ gpick._t=null; groupSetColor(name,online,hexInt(gpick.value)); },180); };
   card.querySelectorAll("[data-groupwhite]").forEach(b=>b.onclick=()=>{ flashEl(b); groupSetTemp(name,online,+b.dataset.groupwhite); });
   // Effects tab — Twinkle
-  card.querySelectorAll("[data-grouptwinkleswatch]").forEach(b=>b.onclick=()=>{ st.twinkleColor=+b.dataset.grouptwinkleswatch;
-    const pick=q("[data-grouptwinklepick]"); if(pick) pick.value=rgbHex(st.twinkleColor); flashEl(b); });
-  const gtpick=q("[data-grouptwinklepick]"); if(gtpick) gtpick.oninput=()=>{ st.twinkleColor=hexInt(gtpick.value); };
-  const gtspeed=q("[data-grouptwinklespeed]"); if(gtspeed) gtspeed.oninput=()=>{ const lvl=+gtspeed.value; st.twinkleSpeedLvl=lvl;
-    gtspeed.style.setProperty("--p",(lvl-1)/9*100+"%"); const lab=q("[data-grouptwinklespeedval]"); if(lab) lab.textContent=TWINKLE_SPEED_LABELS[lvl]; };
-  const gtstart=q("[data-grouptwinklestart]"); if(gtstart) gtstart.onclick=()=>groupStartTwinkle(name,online,st.twinkleColor,st.twinkleSpeedLvl);
-  const gtstop=q("[data-grouptwinklestop]"); if(gtstop) gtstop.onclick=async()=>{ await stopSceneFor(online.map(d=>d.device)); toast("Twinkle stopped"); render(); renderGroupDetail(); };
+  card.querySelectorAll("[data-groupmovepattern]").forEach(b=>b.onclick=()=>{ st.movePattern=b.dataset.groupmovepattern;
+    card.querySelectorAll("[data-groupmovepattern]").forEach(x=>x.classList.toggle("active", x.dataset.groupmovepattern===st.movePattern)); flashEl(b); });
+  card.querySelectorAll("[data-groupmoveswatch]").forEach(b=>b.onclick=()=>{ st.moveColor=+b.dataset.groupmoveswatch;
+    const pick=q("[data-groupmovepick]"); if(pick) pick.value=rgbHex(st.moveColor); flashEl(b); });
+  const gmpick=q("[data-groupmovepick]"); if(gmpick) gmpick.oninput=()=>{ st.moveColor=hexInt(gmpick.value); };
+  const gmspeed=q("[data-groupmovespeed]"); if(gmspeed) gmspeed.oninput=()=>{ const lvl=+gmspeed.value; st.moveSpeedLvl=lvl;
+    gmspeed.style.setProperty("--p",(lvl-1)/9*100+"%"); const lab=q("[data-groupmovespeedval]"); if(lab) lab.textContent=MOVE_SPEED_LABELS[lvl]; };
+  const gmstart=q("[data-groupmovestart]"); if(gmstart) gmstart.onclick=()=>groupStartMovement(name,online,st.movePattern,st.moveColor,st.moveSpeedLvl);
+  const gmstop=q("[data-groupmovestop]"); if(gmstop) gmstop.onclick=async()=>{ await stopSceneFor(online.map(d=>d.device)); toast("Stopped"); render(); renderGroupDetail(); };
   const gflash=q("[data-groupflash]"); if(gflash) gflash.onclick=async()=>{
     const rs=await Promise.allSettled(online.map(d=>{ const {r,g,b}=Govee.intToRgb(d._state.color); return Govee.flash(d.device,[[r,g,b]],3); }));
     reportGroupFailures(online,rs,name); toast("Flashing "+name); };
@@ -1255,13 +1273,15 @@ function renderLightDetail(){
       closeLight(); toast(`Hid "${d.deviceName}" — undo in Settings → Hidden lights`); await load();
     }catch(e){ toast("Couldn't hide this light: "+e.message, true); }
   };
-  card.querySelectorAll("[data-twinkleswatch]").forEach(b=>b.onclick=()=>{ d._twinkleColor=+b.dataset.twinkleswatch;
-    const pick=q("[data-twinklepick]"); if(pick) pick.value=rgbHex(d._twinkleColor); flashEl(b); });
-  const twPick=q("[data-twinklepick]"); if(twPick) twPick.oninput=()=>{ d._twinkleColor=hexInt(twPick.value); };
-  const twSpeed=q("[data-twinklespeed]"); if(twSpeed) twSpeed.oninput=()=>{ const lvl=+twSpeed.value; d._twinkleSpeedLvl=lvl;
-    twSpeed.style.setProperty("--p",(lvl-1)/9*100+"%"); const lab=q("[data-twinklespeedval]"); if(lab) lab.textContent=TWINKLE_SPEED_LABELS[lvl]; };
-  const twStart=q("[data-twinklestart]"); if(twStart) twStart.onclick=()=>startTwinkle(d);
-  const twStop=q("[data-twinklestop]"); if(twStop) twStop.onclick=async()=>{ await stopSceneFor([d.device]); toast("Twinkle stopped"); render(); renderLightDetail(); };
+  card.querySelectorAll("[data-movepattern]").forEach(b=>b.onclick=()=>{ d._movePattern=b.dataset.movepattern;
+    card.querySelectorAll("[data-movepattern]").forEach(x=>x.classList.toggle("active", x.dataset.movepattern===d._movePattern)); flashEl(b); });
+  card.querySelectorAll("[data-moveswatch]").forEach(b=>b.onclick=()=>{ d._moveColor=+b.dataset.moveswatch;
+    const pick=q("[data-movepick]"); if(pick) pick.value=rgbHex(d._moveColor); flashEl(b); });
+  const mvPick=q("[data-movepick]"); if(mvPick) mvPick.oninput=()=>{ d._moveColor=hexInt(mvPick.value); };
+  const mvSpeed=q("[data-movespeed]"); if(mvSpeed) mvSpeed.oninput=()=>{ const lvl=+mvSpeed.value; d._moveSpeedLvl=lvl;
+    mvSpeed.style.setProperty("--p",(lvl-1)/9*100+"%"); const lab=q("[data-movespeedval]"); if(lab) lab.textContent=MOVE_SPEED_LABELS[lvl]; };
+  const mvStart=q("[data-movestart]"); if(mvStart) mvStart.onclick=()=>startMovement(d);
+  const mvStop=q("[data-movestop]"); if(mvStop) mvStop.onclick=async()=>{ await stopSceneFor([d.device]); toast("Stopped"); render(); renderLightDetail(); };
   attachWhole(card,d);
   if(seg.supported) attachSub(card,d,seg);
   attachSceneChips(card,d);
@@ -1305,45 +1325,74 @@ function wholeBody(d){
 }
 // Speed is exposed as a 1-10 "level" (right = faster), not raw milliseconds —
 // converted to the engine's stepMs here so the slider reads naturally.
-const TWINKLE_SPEED_LABELS = {1:"Very slow",2:"Very slow",3:"Slow",4:"Slow",5:"Medium",6:"Medium",7:"Brisk",8:"Fast",9:"Fast",10:"Very fast"};
-const TWINKLE_SPEED_DEFAULT = 8;   // level 6 landed right at the server's rate-limit floor with no
-  // speedup yet applied (a real bug, fixed 2026-07-12) — 8 gives a visibly alive default out of the box
-// range tightened 2026-07-12 (jford: "a twinkle should be just a second or
-// two") — combined with the server's cycleSteps cut (16→4), this keeps the
-// WHOLE slider range landing in the 1-6 second ballpark instead of 2-58s:
-// fastest (150ms) ≈ 1.2-2.4s per cycle depending on segment count, slowest
-// (400ms) ≈ 3.2-6.4s. No more "slow" option that stretches past a few
-// seconds — twinkle is a quick pulse now, not a slow synchronized breathe.
-function twinkleStepMs(lvl){ return Math.round(400 - (lvl-1)*28); }
-function twinkleCardHTML(d){
-  const color = d._twinkleColor ?? 0xffb454;   // warm amber — the classic "fairy light" glow
-  const lvl = d._twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT;
-  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-twinkleswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
-  const running = ActiveScene.get(d.device)?.pattern === "twinkle";
-  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">✨</span>Twinkle${running?'<span class="ld-val" style="color:#7cf5b8">Running</span>':''}</div>
-    <div class="ld-dim" style="margin-bottom:10px">A slow glowing fade, like fairy lights — pick a color and speed, then start it on this light.</div>
-    <div class="ld-sws">${swatches}<input type="color" class="swatch picker" value="${rgbHex(color)}" data-twinklepick ${d.online?'':'disabled'} title="Custom twinkle color"></div>
-    <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-twinklespeedval>${TWINKLE_SPEED_LABELS[lvl]}</span></div>
-    <input type="range" min="1" max="10" value="${lvl}" data-twinklespeed ${d.online?'':'disabled'} style="--p:${(lvl-1)/9*100}%">
+const MOVE_SPEED_LABELS = {1:"Very slow",2:"Very slow",3:"Slow",4:"Slow",5:"Medium",6:"Medium",7:"Brisk",8:"Fast",9:"Fast",10:"Very fast"};
+const MOVE_SPEED_DEFAULT = 8;
+// GENERALIZED 2026-07-21 (jford: "what about a speed control for twinkle
+// and all other movement types?") — Twinkle was the only pattern with a
+// standard, always-findable control; Chase/Wave/Strobe/Bounce were only
+// reachable as fixed-speed presets in the Scenes library. Same card, same
+// pattern (pun intended) as everything else this session: one shared
+// speed-level abstraction, mapped to EACH pattern's own real server floor
+// (chase 180ms/wave 280ms/strobe 110ms/bounce 220ms/twinkle 250ms — see
+// server.js) so "Fast" always means "as fast as that specific engine can
+// safely go," not one generic number that's wrong for most of them.
+const MOVE_PATTERNS = [
+  {key:"twinkle", label:"Twinkle", icon:"✨"},
+  {key:"chase",   label:"Chase",   icon:"💫"},
+  {key:"wave",    label:"Wave",    icon:"🌊"},
+  {key:"strobe",  label:"Strobe",  icon:"⚡"},
+  {key:"bounce",  label:"Bounce",  icon:"🎆"},
+];
+const MOVE_STEP_RANGES = { twinkle:[400,150], chase:[900,180], wave:[1200,280], strobe:[600,110], bounce:[900,220] };
+function movementStepMs(pattern, lvl){
+  const [slow,fast] = MOVE_STEP_RANGES[pattern] || MOVE_STEP_RANGES.twinkle;
+  return Math.round(slow - (lvl-1)*(slow-fast)/9);
+}
+// Wave needs several colors to actually show a flowing barber-pole motion —
+// a single flat color just flashes uniformly. Derive 3 brightness shades
+// from whatever ONE color the user picked, rather than making them pick a
+// whole palette in this simple control.
+function shadesOf(r,g,b,n){
+  return Array.from({length:n},(_,i)=>{ const f=1-i*(0.55/(n-1)); return [Math.round(r*f),Math.round(g*f),Math.round(b*f)]; });
+}
+function movementCardHTML(d){
+  const pattern = d._movePattern || "twinkle";
+  const color = d._moveColor ?? 0xffb454;   // warm amber — the classic "fairy light" glow
+  const lvl = d._moveSpeedLvl || MOVE_SPEED_DEFAULT;
+  const patternChips = MOVE_PATTERNS.map(p=>`<button class="movepat ${p.key===pattern?'active':''}" data-movepattern="${p.key}"><span class="ico3">${p.icon}</span>${p.label}</button>`).join("");
+  const swatches = MORECOLORS.map(hex=>`<button class="ld-sw" data-moveswatch="${hexInt(hex)}" style="background:${hex}"></button>`).join("");
+  const runningRec = ActiveScene.get(d.device);
+  const running = runningRec && SEG_PATTERNS.includes(runningRec.pattern);
+  return `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🎇</span>Movement${running?`<span class="ld-val" style="color:#7cf5b8">Running: ${runningRec.name}</span>`:''}</div>
+    <div class="ld-dim" style="margin-bottom:10px">Pick a pattern, color, and speed, then start it on this light.</div>
+    <div class="movepats">${patternChips}</div>
+    <div class="ld-sws" style="margin-top:12px">${swatches}<input type="color" class="swatch picker" value="${rgbHex(color)}" data-movepick ${d.online?'':'disabled'} title="Custom color"></div>
+    <div class="ld-lbl" style="margin-top:14px"><span>Speed</span><span data-movespeedval>${MOVE_SPEED_LABELS[lvl]}</span></div>
+    <input type="range" min="1" max="10" value="${lvl}" data-movespeed ${d.online?'':'disabled'} style="--p:${(lvl-1)/9*100}%">
     <div class="ld-actions" style="margin-top:12px">
-      <button class="ld-act" data-twinklestart ${d.online?'':'disabled'}>▶ Start Twinkle</button>
-      <button class="ld-act" data-twinklestop ${d.online?'':'disabled'}>■ Stop</button>
+      <button class="ld-act" data-movestart ${d.online?'':'disabled'}>▶ Start</button>
+      <button class="ld-act" data-movestop ${d.online?'':'disabled'}>■ Stop</button>
     </div></div>`;
 }
-async function startTwinkle(d){
+async function startMovement(d){
   if(CONFIG.USE_MOCK){ toast("Demo mode — connect in Settings to actually run this"); return; }
   await stopSceneFor([d.device]);
-  const color = d._twinkleColor ?? 0xffb454;
+  const pattern = d._movePattern || "twinkle";
+  const color = d._moveColor ?? 0xffb454;
   const {r,g,b} = Govee.intToRgb(color);
-  const step = twinkleStepMs(d._twinkleSpeedLvl || TWINKLE_SPEED_DEFAULT);
+  const step = movementStepMs(pattern, d._moveSpeedLvl || MOVE_SPEED_DEFAULT);
+  const cols = pattern==="wave" ? shadesOf(r,g,b,3) : [[r,g,b]];
+  const body = {devices:[d.device], pattern, cols, step};
+  if(pattern==="chase" || pattern==="bounce"){ body.bandWidth=3; body.bandCount=3; }
+  const label = MOVE_PATTERNS.find(p=>p.key===pattern)?.label || pattern;
   try{
     const res=await fetch(CONFIG.PROXY_BASE+"/govee/segscene",{method:"POST",
       headers:{"Content-Type":"application/json","X-Passcode":CONFIG.PASSCODE},
-      body:JSON.stringify({devices:[d.device], pattern:"twinkle", cols:[[r,g,b]], step})});
+      body:JSON.stringify(body)});
     if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error || ("HTTP "+res.status));
-    ActiveScene.mark(d.device,"Twinkle","twinkle");
-    toast("Twinkle started on "+d.deviceName); render(); renderLightDetail();
-  }catch(e){ toast("Couldn't start Twinkle: "+e.message, true); }
+    ActiveScene.mark(d.device,label,pattern);
+    toast(label+" started on "+d.deviceName); render(); renderLightDetail();
+  }catch(e){ toast("Couldn't start "+label+": "+e.message, true); }
 }
 function effectsPaneHTML(d,seg){
   const segCard = seg.supported ? `<div class="ld-card"><div class="ld-hdr2"><span class="ico">🧩</span>Sections of this strip</div>${subBody(d,seg)}</div>` : "";
@@ -1354,7 +1403,7 @@ function effectsPaneHTML(d,seg){
   // app clean and modern" — a lone button squeezed in after small circular
   // swatches read as an afterthought, not a deliberate action).
   const cycleRow = pal ? `<div class="ld-actions" style="margin-top:10px"><button class="ld-act" data-ldphotoapply>Cycle these</button></div>` : "";
-  return twinkleCardHTML(d)
+  return movementCardHTML(d)
     + `<div class="ld-card"><div class="ld-hdr2"><span class="ico">⚡</span>Quick effects</div>
       <div class="ld-actions">
         <button class="ld-act" data-ldflash ${d.online?'':'disabled'}>Flash</button>

@@ -152,6 +152,21 @@ function pump() {
   };
   step();
 }
+// BUG 2026-07-22 (jford: "what i picked on the app doesnt seem to be what
+// its doing. but it did change mode") — stopSegAnim/stopBreathe below clear
+// the JS interval/timeout that would generate FUTURE ticks, but until now
+// did nothing about calls from the OLD pattern already sitting in ctlQueue
+// waiting for a rate-limit token (routine now that control calls queue
+// instead of firing immediately). Switch scenes while the old one still had
+// queued-but-undelivered calls, and those stale calls fire AFTER the switch
+// — the light ends up painted by a race between the old and new scene,
+// looking like neither one. cancelQueued drops a device's not-yet-dispatched
+// calls so a stop/switch is actually clean.
+function cancelQueued(id) {
+  for (let i = ctlQueue.length - 1; i >= 0; i--) {
+    if (ctlQueue[i].id === id) { ctlQueue[i].resolve({ ok: false, cancelled: true }); ctlQueue.splice(i, 1); }
+  }
+}
 
 let deviceMap = {};   // device id -> { sku, deviceName, capabilities }
 async function listDevices() {
@@ -307,6 +322,7 @@ function stopSegAnim(id) {
   if (segAutoStop[id]) { clearTimeout(segAutoStop[id]); delete segAutoStop[id]; }
   if (showTimers[id]) { clearTimeout(showTimers[id]); delete showTimers[id]; }
   if (showAutoStop[id]) { clearTimeout(showAutoStop[id]); delete showAutoStop[id]; }
+  cancelQueued(id);
 }
 // SHOW 2026-07-21 (jford: "do we have any preset dancing scenes that arent
 // just a single movement in one direction... like a true production?") —
@@ -502,6 +518,7 @@ function armBreatheTimer(id, handle) {
 function stopBreathe(id) {
   if (breatheTimers[id]) { clearInterval(breatheTimers[id]); delete breatheTimers[id]; }
   if (breatheAutoStop[id]) { clearTimeout(breatheAutoStop[id]); delete breatheAutoStop[id]; }
+  cancelQueued(id);
 }
 async function runBreatheWhole(id, rgb, stepMs) {
   stopBreathe(id);

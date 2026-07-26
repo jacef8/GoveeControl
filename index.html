@@ -608,11 +608,20 @@ function render(){
 // compact light "chip": colored dot + name + toggle, with brightness + custom color
 function liteHTML(d){
   const scene = ActiveScene.get(d.device);
-  const c = cssRgb(d._state.color);
   const on = d._state.on && d.online;
+  // jford: "it always shows one of the lights as black... i have never made
+  // a light black." Govee reports colorRgb:0 for a lit strip whenever it's
+  // not a single flat color right now — segmented/multicolor content, or a
+  // scene that got stopped mid-cycle on an "off" frame. No swatch in this
+  // app ever offers literal black, so a lit light with color:0 is never a
+  // real user choice — it's "no single color to show," not "the light is
+  // black." Give it the same rainbow "can't summarize as one dot" treatment
+  // already used for a running scene, instead of a misleading black dot.
+  const colorUnknown = on && d._state.color === 0;
+  const c = cssRgb(d._state.color);
   const bri = d._state.brightness;
   const status = !d.online ? "Offline" : scene ? `🎬 ${scene.name}` : (on ? `On · ${bri}%` : "Off");
-  const dotCls = scene && on ? "litedot scenedot" : "litedot";
+  const dotCls = (scene || colorUnknown) && on ? "litedot scenedot" : "litedot";
   return `<div class="lite ${on?'on':''} ${d.online?'':'offline'}" style="--litec:${c}" data-litedetail="${d.device}" title="Tap for full controls">
     <div class="literow">
       <span class="${dotCls}"></span>
